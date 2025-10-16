@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\Producto;
 use App\Models\Categoria;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Orchid\Crud\Resource;
 use Orchid\Screen\Fields\Input;
 use Orchid\Screen\Fields\Picture;
+use Orchid\Screen\Fields\Upload;
 use Orchid\Screen\Fields\Select;
 use Orchid\Screen\Sight;
 use Orchid\Screen\TD;
@@ -60,11 +62,12 @@ class ProductoResource extends Resource
                 ->fromModel(Categoria::class, 'Nombre')
                 ->empty('Selecciona una categoria'),
 
-                Picture::make('image')
+                // Subida de imagen con Attachments de Orchid (grupo 'image')
+                Upload::make('image')
                 ->title('Imagen')
-                ->storage('public') // Usa el disco correcto
-                ->accepted(['image/*']) // Acepta solo imágenes
-                ->maxFiles(1), // Permite solo una imagen
+                ->groups('image')
+                ->acceptedFiles('image/*')
+                ->maxFiles(1),
         ];
     }
 
@@ -89,10 +92,22 @@ class ProductoResource extends Resource
 
             TD::make('Imagen')
             ->render(function ($producto) {
-                // Obtén la URL de la imagen usando el sistema de attachments
                 $image = $producto->attachment('image')->first();
-                return $image
-                    ? "<img src='{$image->url}' alt='{$producto->Nombre}' width='50' height='50'>"
+                if (!$image) {
+                    return 'Sin Imagen';
+                }
+                $disk = config('platform.attachment.disk', 'public');
+                $url = method_exists($image, 'url') ? $image->url() : null;
+                if (empty($url)) {
+                    $path = $image->path ?? null;
+                    if ($path) {
+                        // Build a public URL to the storage path
+                        $base = config('filesystems.disks.public.url', url('/storage'));
+                        $url = rtrim($base, '/') . '/' . ltrim($path, '/');
+                    }
+                }
+                return $url
+                    ? "<img src='" . e($url) . "' alt='" . e($producto->Nombre) . "' width='50' height='50'>"
                     : 'Sin Imagen';
             }),
 
@@ -126,8 +141,20 @@ class ProductoResource extends Resource
             Sight::make('categoria.Nombre', 'CATEGORIA'),
             Sight::make('Imagen')->render(function ($producto) {
                 $image = $producto->attachment('image')->first();
-                return $image
-                    ? "<img src='{$image->url}' alt='{$producto->Nombre}' width='100'>"
+                if (!$image) {
+                    return 'Sin Imagen';
+                }
+                $disk = config('platform.attachment.disk', 'public');
+                $url = method_exists($image, 'url') ? $image->url() : null;
+                if (empty($url)) {
+                    $path = $image->path ?? null;
+                    if ($path) {
+                        $base = config('filesystems.disks.public.url', url('/storage'));
+                        $url = rtrim($base, '/') . '/' . ltrim($path, '/');
+                    }
+                }
+                return $url
+                    ? "<img src='" . e($url) . "' alt='" . e($producto->Nombre) . "' width='100'>"
                     : 'Sin Imagen';
             }),
             Sight::make('created_at', 'Date of creation'),
@@ -152,18 +179,13 @@ class ProductoResource extends Resource
         // Guarda los datos principales del producto
         $model->fill($request->except('image'));
         $model->save();
-    
-        // Procesar el campo 'image' (que actualmente contiene una URL)
-        $imageUrl = $request->input('image');
-    
-        if ($imageUrl) {
-            // Busca el archivo adjunto en la tabla 'attachments' usando la URL
-            $attachment = DB::table('attachments')->where('path', 'like', '%' . basename($imageUrl))->first();
-    
-            if ($attachment) {
-                // Asocia el archivo adjunto al modelo
-                $model->attachment()->syncWithoutDetaching([$attachment->id]);
-            }
+
+        // Asociar attachments subidos desde el campo Upload (recibe IDs)
+        $imageIds = (array) $request->input('image', []);
+        $imageIds = array_filter($imageIds, fn($v) => !empty($v));
+        if (!empty($imageIds)) {
+            // Reemplaza la imagen anterior por la nueva
+            $model->attachment()->sync($imageIds);
         }
     }
 
@@ -172,6 +194,6 @@ class ProductoResource extends Resource
      */
     public function with(): array
     {
-        return ['categoria'];
+    return ['categoria', 'attachment'];
     }
 }
