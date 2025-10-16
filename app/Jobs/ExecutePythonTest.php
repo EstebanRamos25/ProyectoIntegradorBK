@@ -31,7 +31,8 @@ class ExecutePythonTest implements ShouldQueue
             '--report-path=' . $data['report_path']
         ]);
         
-        $process->setTimeout(300);
+    $timeout = $data['timeout'] ?? 300;
+    $process->setTimeout($timeout);
         $process->run();
         
         if ($process->isSuccessful()) {

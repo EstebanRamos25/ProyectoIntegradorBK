@@ -16,11 +16,18 @@ class TestingController extends Controller
         $reportPath = base_path("testing-scripts/reports/{$reportName}_{$uuid}.html");
         
         // Almacenar parámetros en caché para el job
+        $pythonBin = env('PYTHON_BIN');
+        if (empty($pythonBin)) {
+            // Fallbacks por sistema operativo
+            $pythonBin = PHP_OS_FAMILY === 'Windows' ? base_path('venv/Scripts/python.exe') : '/usr/bin/python3';
+        }
+
         Cache::put("test:{$uuid}", [
-            'python_bin' => base_path('venv/Scripts/python.exe'),
+            'python_bin' => $pythonBin,
             'script' => base_path("testing-scripts/{$script}"),
             'report_path' => $reportPath,
-            'type' => $type
+            'type' => $type,
+            'timeout' => $timeout,
         ], now()->addHours(2));
 
         // Despachar trabajo en cola
@@ -36,14 +43,24 @@ class TestingController extends Controller
 
     public function locust()
     {
-        return $this->executeTest('prueba_locust.py', 600, 'locust_report', 'html');
+        // Ajuste: usar el nombre de archivo correcto en testing-scripts
+        return $this->executeTest('prueba_locust_ui.py', 600, 'locust_report', 'html');
     }
 
     public function status($uuid)
     {
         $status = Cache::get("test:{$uuid}:status", 'pending');
         $reportPath = Cache::get("test:{$uuid}:report");
-        
+
+        // Si la solicitud espera JSON, responder en JSON (para fetch)
+        if (request()->expectsJson()) {
+            return response()->json([
+                'uuid' => $uuid,
+                'status' => $status,
+                'reportPath' => $reportPath,
+            ]);
+        }
+
         return view('testing.status', [
             'uuid' => $uuid,
             'status' => $status,
@@ -63,5 +80,24 @@ class TestingController extends Controller
         }
         
         return back()->with('error', 'Reporte no encontrado');
+    }
+
+    // Métodos faltantes referenciados por rutas
+    public function testCases()
+    {
+        return view('testing.status', [
+            'uuid' => 'manual',
+            'status' => 'pending',
+            'reportPath' => null,
+        ]);
+    }
+
+    public function integration()
+    {
+        return view('testing.status', [
+            'uuid' => 'manual',
+            'status' => 'pending',
+            'reportPath' => null,
+        ]);
     }
 }

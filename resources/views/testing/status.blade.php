@@ -84,7 +84,7 @@
     @push('scripts')
     <script>
         const checkStatus = () => {
-            fetch("{{ route('testing.status', $uuid) }}")
+            fetch("{{ route('testing.status', $uuid) }}", { headers: { 'Accept': 'application/json' } })
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'completed') {
