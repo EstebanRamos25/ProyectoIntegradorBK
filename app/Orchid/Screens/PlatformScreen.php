@@ -15,6 +15,7 @@ use App\Orchid\Layouts\Examples\ChartPercentageExample;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Orchid\Screen\Screen;
+use Orchid\Screen\Actions\Link;
 use Orchid\Screen\TD;
 use Orchid\Support\Facades\Layout;
 
@@ -35,8 +36,11 @@ class PlatformScreen extends Screen
                 'scenes'      => Escena::count(),
             ];
 
-            // Last 6 months
-            $months = 6;
+            // Months window (3/6/12)
+            $months = (int) request()->input('months', 6);
+            if (!in_array($months, [3, 6, 12], true)) {
+                $months = 6;
+            }
             $start = Carbon::now()->startOfMonth()->subMonths($months - 1);
             $labels = [];
             for ($i = 0; $i < $months; $i++) {
@@ -52,7 +56,7 @@ class PlatformScreen extends Screen
                 ->take(8)
                 ->get();
 
-            // Products by Category (top 8)
+        // Products by Category (top 8)
             $prodCatAgg = DB::table('productos as p')
                 ->join('categorias as c', 'c.id', '=', 'p.categoria_id')
                 ->selectRaw('c.Nombre as label, COUNT(*) as total')
@@ -63,7 +67,7 @@ class PlatformScreen extends Screen
             $prodCatLabels = $prodCatAgg->pluck('label')->all();
             $prodCatValues = $prodCatAgg->pluck('total')->map(fn($v) => (int)$v)->all();
 
-            // Inventories by State
+        // Inventories by State
             $invStateAgg = DB::table('inventarios')
                 ->selectRaw('COALESCE(Estado, "Sin estado") as label, COUNT(*) as total')
                 ->groupBy('label')
@@ -71,6 +75,27 @@ class PlatformScreen extends Screen
                 ->get();
             $invStateLabels = $invStateAgg->pluck('label')->all();
             $invStateValues = $invStateAgg->pluck('total')->map(fn($v) => (int)$v)->all();
+
+            // Projects by User (top 8)
+            $projUserAgg = DB::table('proyectos as pr')
+                ->join('users as u', 'u.id', '=', 'pr.user_id')
+                ->selectRaw('u.name as label, COUNT(*) as total')
+                ->groupBy('u.name')
+                ->orderByDesc('total')
+                ->limit(8)
+                ->get();
+            $projUserLabels = $projUserAgg->pluck('label')->all();
+            $projUserValues = $projUserAgg->pluck('total')->map(fn($v) => (int)$v)->all();
+
+            // Products by Brand (top 8)
+            $prodBrandAgg = DB::table('productos')
+                ->selectRaw('COALESCE(Marca, "Sin marca") as label, COUNT(*) as total')
+                ->groupBy('label')
+                ->orderByDesc('total')
+                ->limit(8)
+                ->get();
+            $prodBrandLabels = $prodBrandAgg->pluck('label')->all();
+            $prodBrandValues = $prodBrandAgg->pluck('total')->map(fn($v) => (int)$v)->all();
 
             return [
                 'metrics' => [
@@ -104,6 +129,20 @@ class PlatformScreen extends Screen
                         'name'   => 'Inventarios por estado',
                         'values' => $invStateValues,
                         'labels' => $invStateLabels,
+                    ],
+                ],
+                'projectsByUser' => [
+                    [
+                        'name'   => 'Proyectos por usuario',
+                        'values' => $projUserValues,
+                        'labels' => $projUserLabels,
+                    ],
+                ],
+                'productsByBrand' => [
+                    [
+                        'name'   => 'Productos por marca',
+                        'values' => $prodBrandValues,
+                        'labels' => $prodBrandLabels,
                     ],
                 ],
             ];
@@ -153,7 +192,11 @@ class PlatformScreen extends Screen
          */
         public function commandBar(): iterable
         {
-            return [];
+            return [
+                Link::make('3 meses')->route('platform.main', ['months' => 3])->icon('bs.calendar3'),
+                Link::make('6 meses')->route('platform.main', ['months' => 6])->icon('bs.calendar3'),
+                Link::make('12 meses')->route('platform.main', ['months' => 12])->icon('bs.calendar3'),
+            ];
         }
 
         /**
@@ -190,6 +233,13 @@ class PlatformScreen extends Screen
                         ->description('Distribucion de productos por categoria (top 8).'),
                     ChartPercentageExample::make('inventoriesByState', 'Inventarios por estado')
                         ->description('Porcentaje de inventarios por estado actual.'),
+                ]),
+
+                Layout::columns([
+                    ChartBarExample::make('projectsByUser', 'Proyectos por usuario')
+                        ->description('Top 8 usuarios con mas proyectos.'),
+                    ChartBarExample::make('productsByBrand', 'Productos por marca')
+                        ->description('Top 8 marcas con mas productos.'),
                 ]),
             ];
         }
