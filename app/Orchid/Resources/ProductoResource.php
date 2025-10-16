@@ -166,4 +166,12 @@ class ProductoResource extends Resource
             }
         }
     }
+
+    /**
+     * Eager load relations for index.
+     */
+    public function with(): array
+    {
+        return ['categoria'];
+    }
 }

@@ -100,4 +100,12 @@ class EscenaResource extends Resource
     {
         return [];
     }
+
+    /**
+     * Eager load relations for index.
+     */
+    public function with(): array
+    {
+        return ['proyecto'];
+    }
 }

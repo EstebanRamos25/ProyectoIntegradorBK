@@ -101,4 +101,12 @@ class InventarioResource extends Resource
     {
         return [];
     }
+
+    /**
+     * Eager load relations for index.
+     */
+    public function with(): array
+    {
+        return ['producto'];
+    }
 }

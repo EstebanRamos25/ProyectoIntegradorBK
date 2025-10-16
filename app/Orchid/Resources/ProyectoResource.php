@@ -67,7 +67,7 @@ class ProyectoResource extends Resource
             TD::make('Descripcion', 'DESCRIPCION'),
             TD::make('Tipo_Proyecto', 'TIPO DE PROYECTO'),
             TD::make('user.name', 'USUARIO'), // Muestra el nombre del usuario relacionado
-            TD::make('Producto', 'PRODUCTO'),
+            TD::make('producto.Nombre', 'PRODUCTO'),
 
             TD::make('created_at', 'Date of creation')
                 ->render(function ($model) {
@@ -98,6 +98,14 @@ class ProyectoResource extends Resource
             Sight::make('created_at', 'Date of creation'),
             Sight::make('updated_at', 'Update date'),
         ];
+    }
+
+    /**
+     * Eager load relations for index to avoid N+1 and enable related columns.
+     */
+    public function with(): array
+    {
+        return ['user', 'producto'];
     }
 
     /**

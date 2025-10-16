@@ -14,14 +14,16 @@ class Proyecto extends Model
 
     protected $fillable = ["Nombre", "Descripcion", "Tipo_Proyecto", "user_id", "producto_id"];
 
-    public function usuario()
+    // Relacin correcta al usuario
+    public function user()
     {
-        return $this->belongsTo(User::class); // Reemplaza 'User' por el nombre del modelo correcto si es necesario.
+        return $this->belongsTo(User::class);
     }
 
-    public function productos()
-{
-    return $this->belongsTo(Producto::class);
-}
+    // Proyecto pertenece a un Producto (FK producto_id)
+    public function producto()
+    {
+        return $this->belongsTo(Producto::class);
+    }
 
 }
