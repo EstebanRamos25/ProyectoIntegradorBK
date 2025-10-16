@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Pruebas de Humo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f8f9fa;
+        }
+        h1 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            text-align: left;
+        }
+        th {
+            background-color: #343a40;
+            color: #fff;
+        }
+        tr:nth-child(even) {
+            background-color: #f1f1f1;
+        }
+        .ok { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        .error { background-color: #fff3cd; color: #856404; }
+        footer {
+            margin-top: 40px;
+            font-size: 0.9em;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reporte de Pruebas de Humo</h1>
+    <p>Fecha y hora de generación: <strong>2025-06-10 15:33:33</strong></p>
+    <table>
+        <tr>
+            <th>URL</th>
+            <th>Estado</th>
+            <th>Detalles</th>
+        </tr>
+<tr class='ok'><td>http://127.0.0.1:8000/admin/main</td><td>OK</td><td>Get Started - ProyectoIntegrador</td></tr><tr class='ok'><td>http://127.0.0.1:8000/admin/crud/list/producto-resources</td><td>OK</td><td>Productos - ProyectoIntegrador</td></tr>
+    </table>
+    <footer>
+        <p>Generado automáticamente por el sistema de pruebas de humo.</p>
+    </footer>
+</body>
+</html>
