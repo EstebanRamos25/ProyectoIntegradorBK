@@ -82,6 +82,12 @@ class PlatformProvider extends OrchidServiceProvider
                 ->permission('platform.systems.roles')
                 ->divider(),
 
+            Menu::make('Auditoría')
+                ->icon('bs.eye')
+                ->route('platform.audit')
+                ->permission('platform.audit')
+                ->title('Monitoreo'),
+
             /* Menu::make('Documentation')
                 ->title('Docs')
                 ->icon('bs.box-arrow-up-right')
@@ -107,6 +113,8 @@ class PlatformProvider extends OrchidServiceProvider
             ItemPermission::group(__('System'))
                 ->addPermission('platform.systems.roles', __('Roles'))
                 ->addPermission('platform.systems.users', __('Users')),
+            ItemPermission::group('Auditoría')
+                ->addPermission('platform.audit', 'Ver registros de auditoría'),
         ];
     }
 }

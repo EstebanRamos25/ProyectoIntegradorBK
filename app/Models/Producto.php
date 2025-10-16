@@ -7,10 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Orchid\Attachment\Attachable;
 use Orchid\Filters\Filterable;
 use Orchid\Screen\AsSource;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Producto extends Model
 {
-    use HasFactory, AsSource, Filterable, Attachable;
+    use HasFactory, AsSource, Filterable, Attachable, LogsActivity;
 
     protected $fillable = ["Nombre", "Descripcion", "Precio", "Marca", "Modelo", "Stock_Minimo", "categoria_id"];
 
@@ -22,5 +24,15 @@ class Producto extends Model
 {
     return $this->belongsToMany(Proyecto::class, 'proyecto__productos');
 }
+
+    // Spatie Activity Log configuration
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->useLogName('productos')
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 
 }

@@ -9,7 +9,8 @@
         "laravel/framework": "^11.9",
         "laravel/tinker": "^2.9",
         "orchid/crud": "^4.3",
-        "orchid/platform": "^14.52"
+        "orchid/platform": "^14.52",
+        "spatie/laravel-activitylog": "^4.7"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
