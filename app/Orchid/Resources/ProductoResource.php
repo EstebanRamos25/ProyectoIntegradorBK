@@ -96,7 +96,6 @@ class ProductoResource extends Resource
                 if (!$image) {
                     return 'Sin Imagen';
                 }
-                $disk = config('platform.attachment.disk', 'public');
                 $url = method_exists($image, 'url') ? $image->url() : null;
                 if (empty($url)) {
                     $path = $image->path ?? null;
@@ -106,9 +105,37 @@ class ProductoResource extends Resource
                         $url = rtrim($base, '/') . '/' . ltrim($path, '/');
                     }
                 }
-                return $url
-                    ? "<img src='" . e($url) . "' alt='" . e($producto->Nombre) . "' width='50' height='50'>"
-                    : 'Sin Imagen';
+                if (!$url) {
+                    return 'Sin Imagen';
+                }
+
+                // Pure CSS :target modal to avoid Alpine dependencies
+                static $cssInjected = false;
+                $thumbStyles = 'object-fit:cover;border-radius:4px;cursor:pointer;';
+                $escapedUrl = e($url);
+                $alt = e($producto->Nombre);
+                $id = 'img-modal-' . e($producto->id);
+
+                $css = '';
+                if (!$cssInjected) {
+                    $css = '<style>
+                    .modal-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999;padding:1rem}
+                    .modal-overlay:target{display:flex}
+                    .modal-card{position:relative;background:#fff;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.2);padding:.5rem;max-width:90vw;max-height:90vh}
+                    .modal-card img{display:block;max-height:80vh;width:auto}
+                    .modal-close{position:absolute;top:.5rem;right:.75rem;font-size:1.5rem;color:#6b7280;text-decoration:none}
+                    </style>';
+                    $cssInjected = true;
+                }
+
+                return $css
+                    . '<a href="#' . $id . '"><img src="' . $escapedUrl . '" alt="' . $alt . '" width="50" height="50" style="' . $thumbStyles . '"></a>'
+                    . '<div id="' . $id . '" class="modal-overlay">'
+                        . '<a href="#" class="modal-close" aria-label="Cerrar">&times;</a>'
+                        . '<div class="modal-card">'
+                            . '<img src="' . $escapedUrl . '" alt="' . $alt . '">' 
+                        . '</div>'
+                    . '</div>';
             }),
 
             TD::make('created_at', 'Date of creation')
@@ -144,7 +171,6 @@ class ProductoResource extends Resource
                 if (!$image) {
                     return 'Sin Imagen';
                 }
-                $disk = config('platform.attachment.disk', 'public');
                 $url = method_exists($image, 'url') ? $image->url() : null;
                 if (empty($url)) {
                     $path = $image->path ?? null;
@@ -153,9 +179,36 @@ class ProductoResource extends Resource
                         $url = rtrim($base, '/') . '/' . ltrim($path, '/');
                     }
                 }
-                return $url
-                    ? "<img src='" . e($url) . "' alt='" . e($producto->Nombre) . "' width='100'>"
-                    : 'Sin Imagen';
+                if (!$url) {
+                    return 'Sin Imagen';
+                }
+
+                // Pure CSS :target modal
+                static $cssInjected2 = false;
+                $escapedUrl = e($url);
+                $alt = e($producto->Nombre);
+                $id = 'img-modal-detail-' . e($producto->id);
+
+                $css = '';
+                if (!$cssInjected2) {
+                    $css = '<style>
+                    .modal-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999;padding:1rem}
+                    .modal-overlay:target{display:flex}
+                    .modal-card{position:relative;background:#fff;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.2);padding:.5rem;max-width:90vw;max-height:90vh}
+                    .modal-card img{display:block;max-height:80vh;width:auto}
+                    .modal-close{position:absolute;top:.5rem;right:.75rem;font-size:1.5rem;color:#6b7280;text-decoration:none}
+                    </style>';
+                    $cssInjected2 = true;
+                }
+
+                return $css
+                    . '<a href="#' . $id . '"><img src="' . $escapedUrl . '" alt="' . $alt . '" width="120" style="object-fit:contain;cursor:pointer"></a>'
+                    . '<div id="' . $id . '" class="modal-overlay">'
+                        . '<a href="#" class="modal-close" aria-label="Cerrar">&times;</a>'
+                        . '<div class="modal-card">'
+                            . '<img src="' . $escapedUrl . '" alt="' . $alt . '">' 
+                        . '</div>'
+                    . '</div>';
             }),
             Sight::make('created_at', 'Date of creation'),
             Sight::make('updated_at', 'Update date'),
