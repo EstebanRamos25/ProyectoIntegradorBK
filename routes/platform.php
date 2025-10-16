@@ -18,6 +18,7 @@ use App\Orchid\Screens\User\UserEditScreen;
 use App\Orchid\Screens\User\UserListScreen;
 use App\Orchid\Screens\User\UserProfileScreen;
 use App\Orchid\Screens\Audit\ActivityListScreen;
+use App\Orchid\Screens\Backup\BackupScreen;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
 use App\Orchid\Screens\TqaScreen;
@@ -117,3 +118,10 @@ Route::screen('audit', ActivityListScreen::class)
     ->breadcrumbs(fn (Trail $trail) => $trail
         ->parent('platform.index')
         ->push('Auditoría', route('platform.audit')));
+
+// Backups
+Route::screen('backup', BackupScreen::class)
+    ->name('platform.backup')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Backups', route('platform.backup')));

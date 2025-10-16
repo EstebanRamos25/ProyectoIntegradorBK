@@ -88,6 +88,12 @@ class PlatformProvider extends OrchidServiceProvider
                 ->permission('platform.audit')
                 ->title('Monitoreo'),
 
+            Menu::make('Backups')
+                ->icon('bs.hdd')
+                ->route('platform.backup')
+                ->permission('platform.backup')
+                ->title('Mantenimiento'),
+
             /* Menu::make('Documentation')
                 ->title('Docs')
                 ->icon('bs.box-arrow-up-right')
@@ -115,6 +121,8 @@ class PlatformProvider extends OrchidServiceProvider
                 ->addPermission('platform.systems.users', __('Users')),
             ItemPermission::group('Auditoría')
                 ->addPermission('platform.audit', 'Ver registros de auditoría'),
+            ItemPermission::group('Backups')
+                ->addPermission('platform.backup', 'Gestionar backups'),
         ];
     }
 }
