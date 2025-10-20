@@ -94,6 +94,12 @@ class PlatformProvider extends OrchidServiceProvider
                 ->permission('platform.backup')
                 ->title('Mantenimiento'),
 
+            Menu::make('Experiencia 3D (Demo)')
+                ->icon('bs.box')
+                ->url(route('three.demo'))
+                ->target('_blank')
+                ->title('Experiencias'),
+
             /* Menu::make('Documentation')
                 ->title('Docs')
                 ->icon('bs.box-arrow-up-right')

@@ -15,6 +15,10 @@ Route::get('/login', function () {
      $prefix = trim(config('platform.prefix', '/admin'), '/');
      return redirect()->to('/' . $prefix . '/login');
 });
+// Demo 3D simple
+Route::get('/3d', function() {
+     return view('three.index');
+})->name('three.demo');
 
 Route::group(['middleware' => ['web', 'auth']], function () {
     Route::get('testing/smoke', [TestingController::class, 'smoke'])
