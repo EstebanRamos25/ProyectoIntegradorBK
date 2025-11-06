@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
+import { cameraConfig, controlsConfig, lightsConfig } from './config'
 
 function Floor({ kind }) {
   // Two simple materials: wood vs ceramic using basic colors for MVP
@@ -28,16 +29,29 @@ function Demo() {
 
   return (
     <>
+      {/* UI: change materials here */}
       <Controls floor={floor} setFloor={setFloor} />
-      <Canvas shadows camera={{ position: [4, 4, 6], fov: 50 }}>
-        <ambientLight intensity={0.6} />
-        <directionalLight castShadow position={[5, 8, 5]} intensity={1.0} />
+      <Canvas shadows camera={{ position: cameraConfig.position, fov: cameraConfig.fov }}>
+        {/* Lights: edit defaults in resources/js/three/config.js */}
+        <ambientLight intensity={lightsConfig.ambient.intensity} />
+        <directionalLight castShadow position={lightsConfig.directional.position} intensity={lightsConfig.directional.intensity} />
         <Floor kind={floor} />
         <mesh position={[0, 0.5, 0]} castShadow>
           <boxGeometry args={[1,1,1]} />
           <meshStandardMaterial color="#90caf9" />
         </mesh>
-        <OrbitControls makeDefault />
+        {/* Camera controls: sensitivity & limits live in config.js */}
+        <OrbitControls makeDefault
+          enableDamping={controlsConfig.enableDamping}
+          dampingFactor={controlsConfig.dampingFactor}
+          rotateSpeed={controlsConfig.rotateSpeed}
+          zoomSpeed={controlsConfig.zoomSpeed}
+          panSpeed={controlsConfig.panSpeed}
+          minDistance={controlsConfig.minDistance}
+          maxDistance={controlsConfig.maxDistance}
+          minPolarAngle={controlsConfig.minPolarAngle}
+          maxPolarAngle={controlsConfig.maxPolarAngle}
+        />
         <Environment preset="city" />
       </Canvas>
     </>
@@ -45,3 +59,9 @@ function Demo() {
 }
 
 createRoot(document.getElementById('r3f-root')).render(<Demo />)
+
+// Where do I change things?
+// - Camera/Lights/Controls: resources/js/three/config.js (cameraConfig, lightsConfig, controlsConfig)
+// - Loading 3D models: we’ll add a SceneLoader component (resources/js/three/loaders/SceneLoader.jsx)
+// - Materials library & textures: resources/js/three/materials/library.js
+// - Global state (current scene/material selections): resources/js/three/store.js
