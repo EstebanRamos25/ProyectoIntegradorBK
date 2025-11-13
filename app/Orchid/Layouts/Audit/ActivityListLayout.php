@@ -26,16 +26,24 @@ class ActivityListLayout extends Table
             TD::make('created_at', 'Fecha')->render(fn($a) => optional($a->created_at)->toDateTimeString()),
             TD::make('changes', 'Cambios')->render(function($a){
                 $props = $a->properties ? $a->properties->toArray() : [];
-                $changes = $props['attributes'] ?? [];
+                $new = $props['attributes'] ?? [];
                 $old = $props['old'] ?? [];
-                $pairs = [];
-                foreach ($changes as $k => $v) {
+                if (empty($new) && empty($old)) return '-';
+
+                $rows = '';
+                $keys = array_unique(array_merge(array_keys($old), array_keys($new)));
+                foreach ($keys as $k) {
                     $ov = $old[$k] ?? null;
-                    if ($ov === $v) continue;
-                    $pairs[] = e($k).': '.e((string)$ov).' → '.e((string)$v);
+                    $nv = $new[$k] ?? null;
+                    if ($ov === $nv) continue;
+                    $ovStr = is_scalar($ov) || is_null($ov) ? (string)$ov : json_encode($ov, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
+                    $nvStr = is_scalar($nv) || is_null($nv) ? (string)$nv : json_encode($nv, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
+                    $rows .= '<tr><th style="vertical-align:top">'.e($k).'</th><td style="white-space:pre-wrap">'.e($ovStr).'</td><td style="white-space:pre-wrap">'.e($nvStr).'</td></tr>';
                 }
-                return empty($pairs) ? '-' : '<div style="white-space:pre-wrap">'.implode("\n", $pairs).'</div>';
-            })->width('30%'),
+                if ($rows === '') return '-';
+                $table = '<table class="table table-sm"><thead><tr><th>Campo</th><th>Antes</th><th>Después</th></tr></thead><tbody>'.$rows.'</tbody></table>';
+                return '<details><summary>Ver cambios</summary>'.$table.'</details>';
+            }),
         ];
     }
 }

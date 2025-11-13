@@ -142,7 +142,10 @@ return [
      |
      */
 
-    'vite' => [],
+    'vite' => [
+        'resources/css/platform.css',
+        'resources/js/platform.js',
+    ],
 
     /*
      |--------------------------------------------------------------------------

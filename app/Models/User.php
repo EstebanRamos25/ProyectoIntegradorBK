@@ -6,9 +6,12 @@ use Orchid\Filters\Types\Like;
 use Orchid\Filters\Types\Where;
 use Orchid\Filters\Types\WhereDateStartEnd;
 use Orchid\Platform\Models\User as Authenticatable;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class User extends Authenticatable
 {
+    use LogsActivity;
     /**
      * The attributes that are mass assignable.
      *
@@ -66,4 +69,13 @@ class User extends Authenticatable
         'updated_at',
         'created_at',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->useLogName('usuarios')
+            ->logOnly(['name','email'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 }

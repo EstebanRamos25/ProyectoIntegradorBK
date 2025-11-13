@@ -1,0 +1,122 @@
+html, body{height:100%}
+:root{
+  /* Paleta de marca */
+  --brand-50:#eef2ff;--brand-100:#e0e7ff;--brand-200:#c7d2fe;--brand-300:#a5b4fc;--brand-400:#818cf8;--brand-500:#6366f1;--brand-600:#4f46e5;--brand-700:#4338ca;--brand-800:#3730a3;--brand-900:#312e81;
+  --accent-500:#10b981;--accent-600:#059669;--danger-500:#ef4444;
+  /* Imagen de fondo del login (personalizada) */
+  --login-bg:url('/images/login-bg.jpg');
+}
+
+/* Temas monocromáticos por módulo (colores combinados dentro de la gama) */
+body[data-theme="productos"]{--brand-500:#6478f2;--brand-600:#4f5de6;--brand-700:#3f4ac9}
+body[data-theme="inventarios"]{--brand-500:#57b0ff;--brand-600:#3797ef;--brand-700:#2f7ec7}
+body[data-theme="proyectos"]{--brand-500:#8b5cf6;--brand-600:#7c3aed;--brand-700:#6d28d9}
+body[data-theme="escenas"]{--brand-500:#34d399;--brand-600:#10b981;--brand-700:#059669}
+body[data-theme="usuarios"]{--brand-500:#f59e0b;--brand-600:#d97706;--brand-700:#b45309}
+body[data-theme="roles"]{--brand-500:#f472b6;--brand-600:#ec4899;--brand-700:#db2777}
+
+/* Aplicar variables a componentes principales */
+.btn-primary,.bg-primary{background:var(--brand-600)!important;border-color:var(--brand-600)!important}
+.btn-primary:hover{background:var(--brand-700)!important;border-color:var(--brand-700)!important;box-shadow:0 8px 20px color-mix(in srgb, var(--brand-600) 45%, transparent)}
+.metric .h2,.metric .h1{color:var(--brand-700)}
+.layout .aside .menu .active>.menu-link{background:color-mix(in srgb, var(--brand-500) 15%, white);color:var(--brand-700)}
+
+/* Sidebar y navegación */
+.layout .aside{background:linear-gradient(180deg, #0f172a 0%, #111827 100%)}
+.layout .aside .brand{color:var(--brand-300)}
+.layout .aside .menu .menu-link{transition:background-color .18s ease,color .18s ease}
+.layout .aside .menu .menu-link:hover{background:var(--brand-50);color:var(--brand-700)}
+.layout .aside .menu .active>.menu-link{background:var(--brand-100);color:var(--brand-700)}
+
+/* Badges / acentos */
+.badge{background:var(--accent-500)!important}
+
+/* Tarjetas con elevación */
+.card{transition:transform .18s ease, box-shadow .18s ease}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(17,24,39,.14)}
+
+/* Tablas más vivas */
+.table{border-radius:.5rem;overflow:hidden}
+.table thead th{background:linear-gradient(180deg,#a7c3ff 0%,#f3f4f6 100%)}
+.table tbody tr{transition:background-color .15s ease}
+.table tbody tr:hover{background:#ffffff}
+.table tbody td{transition:color .15s ease}
+
+/* Módulos: entrada suave */
+.screen-enter{animation:screenIn .28s ease both}
+@keyframes screenIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.screen-enter .card, .screen-enter .table{animation:fadePop .3s ease both}
+@keyframes fadePop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Listados: resaltar cabeceras y filas activas */
+.bg-white .table thead th{border-bottom:1px solid rgba(17,24,39,.06)}
+.table .text-muted{color:#6b7280!important}
+.table .badge{filter:saturate(1.1)}
+
+/* Header del dashboard con hero sutil */
+.dashboard-hero{position:relative;border-radius:12px;padding:16px 20px;margin-bottom:12px;
+  background:linear-gradient(135deg, rgba(99,102,241,.12), rgba(16,185,129,.10));
+  border:1px solid rgba(99,102,241,.18)}
+.dashboard-hero .title{font-weight:700;color:var(--brand-700)}
+.dashboard-hero .desc{color:#6b7280}
+
+/* Sidebar easing */
+.layout .aside{transition:background-color .25s ease}
+.layout .aside .menu .menu-link{transition:padding-left .15s ease}
+.layout .aside .menu .menu-link:hover{padding-left:14px}
+
+/* Botones y estados */
+.btn{transition:background-color .2s ease, transform .1s ease, box-shadow .2s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary,.bg-primary{background:var(--brand-600)!important;border-color:var(--brand-600)!important}
+.btn-primary:hover{background:var(--brand-700)!important;border-color:var(--brand-700)!important;box-shadow:0 8px 20px rgba(79,70,229,.35)}
+.btn-outline-primary:hover{background:var(--brand-50)!important;color:var(--brand-700)!important}
+
+/* Inputs y focus */
+input.form-control,select.form-select,textarea.form-control{transition:box-shadow .15s ease,border-color .15s ease}
+input.form-control:focus,select.form-select:focus,textarea.form-control:focus{border-color:var(--brand-400)!important;box-shadow:0 0 0 3px rgba(99,102,241,.25)!important}
+
+/* Tablas */
+.table tbody tr{transition:background-color .15s ease}
+.table tbody tr:hover{background:#fafafc}
+
+/* Animaciones generales */
+.fade{transition:opacity .2s ease}
+.dropdown-menu{animation:slideDown .16s ease}
+@keyframes slideDown{from{transform:translateY(-6px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* Métricas (Dashboard) */
+.metric .text-muted{color:#6b7280}
+.metric .h2, .metric .h1{color:var(--brand-700)}
+
+/* Login con vida: fondo a pantalla completa sin barras laterales */
+body.login-bg{min-height:100vh;position:relative;background-color:transparent!important}
+body.login-bg::before{
+  content:"";position:fixed;inset:0;z-index:-1;
+  pointer-events:none; z-index:0;
+  background:
+    linear-gradient(180deg, rgba(17,24,39,.12) 0%, rgba(17,24,39,.22) 100%),
+    var(--login-bg),
+    url('/images/login-bg.jpg'),
+    radial-gradient(1200px 600px at 10% 10%, rgba(99,102,241,.08), transparent 60%);
+  background-size:100% 100%, cover, cover, 100% 100%;
+  background-position:center, center, center, center;
+  background-repeat:no-repeat, no-repeat, no-repeat, no-repeat;
+  background-attachment:scroll, fixed, fixed, scroll;
+  background-blend-mode:normal, normal, normal, soft-light;
+  will-change:transform;
+  transform: translate3d(var(--parallax-x, 0), var(--parallax-y, 0), 0) scale(1.03);
+  filter: brightness(1.05) contrast(1.05) saturate(1.08);
+  transition: transform .2s ease-out;
+}
+.login-bg .container-fluid{position:relative;z-index:1}
+.form-signin .rounded.shadow-sm{border-top:3px solid var(--brand-600);animation:popIn .35s ease both;backdrop-filter:blur(2px) saturate(120%);background-color:rgba(255,255,255,.95)}
+@keyframes popIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.form-signin .btn-primary{background:var(--brand-600);border-color:var(--brand-600)}
+.form-signin .btn-primary:hover{background:var(--brand-700);border-color:var(--brand-700);box-shadow:0 8px 20px rgba(79,70,229,.25)}
+.form-signin a{color:var(--brand-300)}
+.form-signin a:hover{color:var(--brand-100)}
+
+/* Inputs del login */
+.form-signin input.form-control{background-color:rgba(255,255,255,.98)}
+.form-signin input.form-control:focus{border-color:var(--brand-400)!important;box-shadow:0 0 0 3px rgba(99,102,241,.28)!important}

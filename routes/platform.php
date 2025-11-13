@@ -112,6 +112,9 @@ Route::screen('/examples/cards', ExampleCardsScreen::class)->name('platform.exam
 
 //Route::screen('idea', Idea::class, 'platform.screens.idea');
 
+// Auditoría: exportación CSV (definir ANTES para evitar colisión con Screen)
+Route::get('audit/export', [ActivityListScreen::class, 'export'])->name('platform.audit.export');
+
 // Auditoría
 Route::screen('audit', ActivityListScreen::class)
     ->name('platform.audit')
@@ -119,7 +122,10 @@ Route::screen('audit', ActivityListScreen::class)
         ->parent('platform.index')
         ->push('Auditoría', route('platform.audit')));
 
-// Backups
+// Descarga de backups (GET) - definir ANTES para evitar colisión con Screen route
+Route::get('backup/download', [BackupScreen::class, 'download'])->name('platform.backup.download');
+
+// Backups (pantalla principal)
 Route::screen('backup', BackupScreen::class)
     ->name('platform.backup')
     ->breadcrumbs(fn (Trail $trail) => $trail
