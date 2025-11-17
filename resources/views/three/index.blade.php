@@ -15,6 +15,7 @@
 <div id="ui">
   <button id="mat-wood">Piso madera</button>
   <button id="mat-ceramic">Piso cerámica</button>
+  <a href="/3d/room" target="_blank" style="margin-left:8px; padding:6px 10px; background:#1976d2; color:#fff; text-decoration:none; border-radius:6px;">Ir a Room demo</a>
 </div>
 <div id="r3f-root"></div>
 </body>
