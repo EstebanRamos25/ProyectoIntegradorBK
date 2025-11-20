@@ -20,6 +20,11 @@ Route::get('/3d', function() {
      return view('three.index');
 })->name('three.demo');
 
+// Demo 3D Room avanzada
+Route::get('/3d/room', function() {
+     return view('three.room');
+})->name('three.room');
+
 Route::group(['middleware' => ['web', 'auth']], function () {
     Route::get('testing/smoke', [TestingController::class, 'smoke'])
          ->name('testing.smoke');

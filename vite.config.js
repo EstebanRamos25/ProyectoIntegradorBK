@@ -9,6 +9,8 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/css/platform.css',
                 'resources/js/platform.js',
+                'resources/js/three/app.jsx',
+                'resources/js/three/roomScene.jsx',
             ],
             refresh: true,
         }),
