@@ -1,8 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
 use App\Http\Controllers\TestingController;
+use App\Http\Controllers\ChatbotController;
 
 // Root redirect to Orchid admin prefix (e.g., /admin)
 Route::get('/', function () {
@@ -24,6 +24,12 @@ Route::get('/3d', function() {
 Route::get('/3d/room', function() {
      return view('three.room');
 })->name('three.room');
+
+// API Chatbot (OpenAI) - requiere sesión web + CSRF + auth
+Route::middleware(['web', 'auth'])->group(function () {
+     Route::post('/api/chatbot', [ChatbotController::class, 'handle'])
+          ->name('api.chatbot');
+});
 
 Route::group(['middleware' => ['web', 'auth']], function () {
     Route::get('testing/smoke', [TestingController::class, 'smoke'])
