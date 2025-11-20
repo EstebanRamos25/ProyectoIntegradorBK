@@ -1,7 +1,6 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
@@ -40,4 +39,9 @@ return [
         'model'   => env('OPENAI_MODEL', 'gpt-4.1-mini'),
     ],
 
+    'ollama' => [
+        'url'    => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
+        'model'  => env('OLLAMA_MODEL', 'llama3'),
+        'timeout'=> env('OLLAMA_TIMEOUT', 120),
+    ],
 ];
