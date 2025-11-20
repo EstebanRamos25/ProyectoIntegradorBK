@@ -13,27 +13,44 @@ use Illuminate\Http\RedirectResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Spatie\Activitylog\Models\Activity;
 use Illuminate\Support\Facades\Auth;
+use Orchid\Support\Facades\Toast;
+use Illuminate\Support\Facades\Log;
+use Orchid\Support\Facades\Layout;
+use Orchid\Screen\Fields\DateTimer;
 
 class BackupScreen extends Screen
 {
     public function query(): array
     {
-    $disk = config('backup.backup.destination.disks')[0] ?? 'local';
-    $backupPath = trim(config('backup.backup.name', 'laravel-backup'));
-    $files = collect(Storage::disk($disk)->files($backupPath))
+        $disk = config('backup.backup.destination.disks')[0] ?? 'local';
+        $backupPath = trim(config('backup.backup.name', 'laravel-backup'));
+
+        $from = request('from');
+        $to = request('to');
+
+        $files = collect(Storage::disk($disk)->files($backupPath))
             ->filter(fn($f) => str_ends_with($f, '.zip'))
-            ->sortDesc()
+            ->map(function ($f) use ($disk) {
+                return [
+                    'file' => $f,
+                    'size' => Storage::disk($disk)->size($f),
+                    'date' => Storage::disk($disk)->lastModified($f),
+                ];
+            })
+            ->when($from, function ($c) use ($from) {
+                $fromTs = strtotime($from . (strlen($from) <= 10 ? ' 00:00:00' : '')) ?: null;
+                return $fromTs ? $c->filter(fn($r) => $r['date'] >= $fromTs) : $c;
+            })
+            ->when($to, function ($c) use ($to) {
+                $toTs = strtotime($to . (strlen($to) <= 10 ? ' 23:59:59' : '')) ?: null;
+                return $toTs ? $c->filter(fn($r) => $r['date'] <= $toTs) : $c;
+            })
+            ->sortByDesc('date')
             ->take(20)
             ->values();
 
         return [
-        'backups' => $files->map(function($f) use ($disk) {
-                return [
-                    'file' => $f,
-            'size' => Storage::disk($disk)->size($f),
-            'date' => Storage::disk($disk)->lastModified($f),
-                ];
-            }),
+            'backups' => $files,
         ];
     }
 
@@ -53,12 +70,31 @@ class BackupScreen extends Screen
             Button::make('Generar backup ahora')
                 ->method('runNow')
                 ->icon('bs.download'),
+            Button::make('Limpiar backups antiguos')
+                ->method('cleanup')
+                ->icon('bs.trash')
+                ->confirm('Esto eliminará backups antiguos según la política de cleanup. ¿Desea continuar?'),
         ];
     }
 
     public function layout(): array
     {
         return [
+            Layout::rows([
+                DateTimer::make('from')
+                    ->title('Desde')
+                    ->allowInput()
+                    ->format('Y-m-d')
+                    ->value(request('from')),
+                DateTimer::make('to')
+                    ->title('Hasta')
+                    ->allowInput()
+                    ->format('Y-m-d')
+                    ->value(request('to')),
+                Button::make('Aplicar filtro')
+                    ->icon('bs.filter')
+                    ->method('applyFilter'),
+            ])->title('Filtrar por fecha'),
             BackupListLayout::class,
         ];
     }
@@ -66,10 +102,28 @@ class BackupScreen extends Screen
     public function runNow(): RedirectResponse
     {
         // Ejecutar backup sólo de la base de datos y sin notificaciones
-        Artisan::call('backup:run', [
-            '--only-db' => true,
-            '--disable-notifications' => true,
-        ]);
+        // Ejecutar por cola para usar el entorno CLI (evita restricciones de sockets en procesos web en Windows)
+        try {
+            Artisan::queue('backup:run', [
+                '--only-db' => true,
+                '--disable-notifications' => true,
+            ])->onQueue('backups');
+            Toast::info('Backup encolado. Se ejecutará en segundo plano y aparecerá en la lista al finalizar.');
+        } catch (\Throwable $e) {
+            Log::warning('Queue backup:run failed from UI', ['ex' => $e->getMessage()]);
+            // Fallback sin cola
+            $exit = Artisan::call('backup:run', [
+                '--only-db' => true,
+                '--disable-notifications' => true,
+            ]);
+            $output = Artisan::output();
+            if ($exit === 0) {
+                Toast::success('Backup de base de datos generado correctamente.');
+            } else {
+                Log::warning('Backup run failed from UI (fallback)', ['exit' => $exit, 'output' => $output]);
+                Toast::warning('No se pudo generar el backup. Verifica DB_DUMP_BINARY_PATH y permisos. Revisa storage/logs/laravel.log.');
+            }
+        }
 
         // Registrar actividad de backup
         try {
@@ -80,18 +134,46 @@ class BackupScreen extends Screen
                 ->sortDesc()
                 ->take(1);
             $last = $files->first();
-            activity('backups')
+            if ($last) {
+                activity('backups')
                 ->causedBy(Auth::user())
                 ->withProperties([
                     'file' => $last,
                     'disk' => $disk,
                 ])
                 ->log('Generó un backup de la base de datos');
+            }
         } catch (\Throwable $e) {
             // silencioso
         }
 
         return back();
+    }
+
+    public function cleanup(): RedirectResponse
+    {
+        try {
+            Artisan::queue('backup:clean')->onQueue('backups');
+            Toast::info('Limpieza encolada. Se ejecutará en segundo plano.');
+        } catch (\Throwable $e) {
+            $exit = Artisan::call('backup:clean');
+            $output = Artisan::output();
+            if ($exit === 0) {
+                Toast::success('Backups antiguos limpiados correctamente.');
+            } else {
+                Log::warning('Backup clean failed from UI', ['exit' => $exit, 'output' => $output]);
+                Toast::warning('No se pudo limpiar los backups antiguos. Revisa permisos y configuración.');
+            }
+        }
+        return back();
+    }
+
+    public function applyFilter(): RedirectResponse
+    {
+        $params = [];
+        if (request()->filled('from')) { $params['from'] = request('from'); }
+        if (request()->filled('to')) { $params['to'] = request('to'); }
+        return redirect()->route('platform.backup', $params);
     }
 
     public function download(?string $file = null): BinaryFileResponse

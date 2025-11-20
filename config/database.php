@@ -57,6 +57,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // Configuración para spatie/laravel-backup: ubicación de mysqldump en Windows/Linux
+            // Establece DB_DUMP_BINARY_PATH en .env, por ejemplo en XAMPP: C:\\xampp\\mysql\\bin
+            'dump' => [
+                'dump_binary_path' => env('DB_DUMP_BINARY_PATH'),
+                'useSingleTransaction' => true,
+            ],
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
