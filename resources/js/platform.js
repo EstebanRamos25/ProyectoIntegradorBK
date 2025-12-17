@@ -197,6 +197,7 @@ document.head.appendChild(style);
       appendMessage('Tú', message);
 
       const module = document.body.dataset.theme || '';
+      const path = location.pathname || '';
       appendMessage('Asistente', 'Pensando...');
 
       try {
@@ -207,7 +208,7 @@ document.head.appendChild(style);
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
           },
-          body: JSON.stringify({message, module}),
+          body: JSON.stringify({message, module, path}),
         });
         const data = await resp.json();
         messagesEl.lastChild.remove(); // quitar "Pensando..."

@@ -2,13 +2,31 @@
 
 namespace App\Services;
 
+use App\Services\Chatbot\DbInsightsService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ChatbotService
 {
+    public function __construct(
+        private readonly DbInsightsService $dbInsights,
+    ) {
+    }
+
     public function chat(string $message, string $module = null): string
     {
         $provider = env('CHAT_PROVIDER', 'ollama'); // por defecto ollama ahora
+
+        // 1) Consultas seguras a DB por módulo (si aplica)
+        try {
+            $dbAnswer = $this->dbInsights->answer($message, $module);
+            if ($dbAnswer) {
+                // Responder directo para mantenerlo rápido.
+                return $dbAnswer;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Chatbot DB insights failed', ['error' => $e->getMessage()]);
+        }
 
         if ($provider === 'ollama') {
             return $this->chatWithOllama($message, $module);
@@ -86,7 +104,18 @@ class ChatbotService
     {
         $url     = rtrim(config('services.ollama.url', 'http://127.0.0.1:11434'), '/');
         $model   = config('services.ollama.model', 'llama3');
-        $timeout = (int) config('services.ollama.timeout', 120); // subir default
+        $timeout = (int) config('services.ollama.timeout', 60);
+
+        // Objetivo: respuestas rápidas y simples
+        $numPredict  = (int) env('OLLAMA_NUM_PREDICT', 120);
+        $temperature = (float) env('OLLAMA_TEMPERATURE', 0.2);
+        $topP        = (float) env('OLLAMA_TOP_P', 0.9);
+
+        // Fallback (útil en Windows con poca RAM): probar modelos más ligeros si el principal falla.
+        // Puedes sobreescribirlo con OLLAMA_FALLBACK_MODELS="qwen2.5:3b,phi3:mini"
+        $fallbackModels = array_values(array_filter(array_map('trim', explode(',', (string) env('OLLAMA_FALLBACK_MODELS', 'llama3:latest')))));
+        array_unshift($fallbackModels, $model);
+        $fallbackModels = array_values(array_unique($fallbackModels));
 
         // Verificación de modelo (se puede saltar)
         if (!filter_var(env('OLLAMA_SKIP_MODEL_CHECK', false), FILTER_VALIDATE_BOOL)) {
@@ -106,50 +135,86 @@ class ChatbotService
             }
         }
 
-        $payload = [
-            'model' => $model,
+        $payloadBase = [
             'messages' => [
                 ['role' => 'system', 'content' => $this->buildSystemPrompt($module)],
                 ['role' => 'user',   'content' => $message],
             ],
             'stream' => false,
+            // Opciones compatibles con Ollama para acelerar respuesta
+            'options' => [
+                'num_predict' => $numPredict,
+                'temperature' => $temperature,
+                'top_p' => $topP,
+            ],
         ];
 
-        $attempts = 0;
-        $maxAttempts = 2; // 1 retry
-        while ($attempts < $maxAttempts) {
-            $attempts++;
-            try {
-                $response = Http::timeout($timeout)
-                    ->post($url . '/api/chat', $payload);
+        foreach ($fallbackModels as $candidateModel) {
+            $payload = $payloadBase + ['model' => $candidateModel];
 
-                if (!$response->successful()) {
-                    return 'Error Ollama (' . $response->status() . ').';
-                }
+            $attempts = 0;
+            $maxAttempts = 2; // 1 retry
+            $localTimeout = $timeout;
 
-                $data = $response->json();
-                if (isset($data['message']['content'])) {
-                    return $data['message']['content'];
+            while ($attempts < $maxAttempts) {
+                $attempts++;
+                try {
+                    $response = Http::timeout($localTimeout)
+                        ->post($url . '/api/chat', $payload);
+
+                    if (!$response->successful()) {
+                        $status = $response->status();
+                        $json = $response->json();
+                        $detail = $json['error'] ?? ($json['message'] ?? null);
+
+                        Log::warning('Ollama error', [
+                            'status' => $status,
+                            'model' => $candidateModel,
+                            'detail' => $detail,
+                        ]);
+
+                        if ($status === 500 && is_string($detail)) {
+                            if (stripos($detail, 'requires more system memory') !== false) {
+                                // Intentar siguiente modelo (más liviano). Si ya no hay, devolver explicación clara.
+                                break;
+                            }
+                            if (stripos($detail, 'not found') !== false) {
+                                return "El modelo '{$candidateModel}' no está disponible en Ollama. Ejecuta: ollama pull {$candidateModel}";
+                            }
+                        }
+
+                        return 'Error Ollama (' . $status . ')' . ($detail ? ': ' . mb_substr((string) $detail, 0, 200) : '.') ;
+                    }
+
+                    $data = $response->json();
+                    if (isset($data['message']['content'])) {
+                        return $data['message']['content'];
+                    }
+                    if (isset($data['messages']) && is_array($data['messages'])) {
+                        $last = end($data['messages']);
+                        if (isset($last['content'])) {
+                            return is_array($last['content']) ? implode("\n", $last['content']) : $last['content'];
+                        }
+                    }
+                    return 'Respuesta vacía de Ollama.';
+                } catch (\Throwable $e) {
+                    $msg = $e->getMessage();
+                    Log::warning('Ollama communication error', [
+                        'model' => $candidateModel,
+                        'error' => $msg,
+                    ]);
+                    if (stripos($msg, 'cURL error 28') !== false && $attempts < $maxAttempts) {
+                        $localTimeout += 15;
+                        continue;
+                    }
+                    if (stripos($msg, 'cURL error 28') !== false) {
+                        return 'Tiempo de espera agotado contactando a Ollama. Verifica que el servicio esté activo y el modelo cargado.';
+                    }
+                    return 'Error de comunicación con Ollama: ' . $msg;
                 }
-                if (isset($data['messages']) && is_array($data['messages'])) {
-                    $last = end($data['messages']);
-                    if (isset($last['content'])) return is_array($last['content']) ? implode("\n", $last['content']) : $last['content'];
-                }
-                return 'Respuesta vacía de Ollama.';
-            } catch (\Throwable $e) {
-                $msg = $e->getMessage();
-                if (stripos($msg, 'cURL error 28') !== false && $attempts < $maxAttempts) {
-                    // aumentar ligeramente el timeout para el segundo intento
-                    $timeout += 60;
-                    continue; // retry
-                }
-                if (stripos($msg, 'cURL error 28') !== false) {
-                    return 'Tiempo de espera agotado contactando a Ollama. Verifica que el servicio esté activo y el modelo cargado.';
-                }
-                return 'Error de comunicación con Ollama: ' . $msg;
             }
         }
 
-        return 'No se pudo obtener respuesta de Ollama.';
+        return 'Ollama no pudo generar respuesta con el modelo configurado. En Windows, esto suele pasar por RAM insuficiente; prueba un modelo más liviano (ej. qwen2.5:3b o phi3:mini) y configúralo en OLLAMA_MODEL.';
     }
 }
