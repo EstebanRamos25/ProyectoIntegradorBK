@@ -23,5 +23,9 @@
         "three": "^0.180.0",
         "vite": "^5.0",
         "zustand": "^5.0.8"
+    },
+    "dependencies": {
+        "@react-three/postprocessing": "^3.0.4",
+        "postprocessing": "^6.38.1"
     }
 }

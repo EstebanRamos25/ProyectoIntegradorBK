@@ -8,6 +8,7 @@ use App\Models\Escena;
 use App\Models\Inventario;
 use App\Models\Producto;
 use App\Models\Proyecto;
+use App\Orchid\Layouts\Dashboard\ProductGalleryLayout;
 use App\Orchid\Layouts\Examples\ChartBarExample;
 use App\Orchid\Layouts\Examples\ChartLineExample;
 use App\Orchid\Layouts\Examples\ChartPieExample;
@@ -55,6 +56,44 @@ class PlatformScreen extends Screen
                 ->latest()
                 ->take(8)
                 ->get();
+
+            // Featured Products (with images)
+            $featuredProducts = Producto::query()
+                ->with(['categoria', 'attachment'])
+                ->latest()
+                ->take(12)
+                ->get()
+                ->map(function (Producto $p): array {
+                    $image = $p->attachment('image')->first();
+
+                    $imageUrl = null;
+                    if ($image) {
+                        if (is_object($image) && method_exists($image, 'url')) {
+                            $imageUrl = $image->url();
+                        }
+                        if (empty($imageUrl)) {
+                            $path = $image->path ?? null;
+                            if ($path) {
+                                $base = config('filesystems.disks.public.url', url('/storage'));
+                                $imageUrl = rtrim($base, '/') . '/' . ltrim($path, '/');
+                            }
+                        }
+                    }
+
+                    if (empty($imageUrl)) {
+                        $svg = rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect fill="#f3f4f6" width="100%" height="100%"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9ca3af" font-size="28" font-family="Arial, Helvetica, sans-serif">Sin imagen</text></svg>');
+                        $imageUrl = 'data:image/svg+xml;utf8,' . $svg;
+                    }
+
+                    return [
+                        'id'       => $p->id,
+                        'name'     => $p->Nombre,
+                        'brand'    => $p->Marca,
+                        'category' => optional($p->categoria)->Nombre,
+                        'image'    => $imageUrl,
+                        'url'      => url('/admin/crud/view/producto-resources/' . $p->id),
+                    ];
+                });
 
         // Products by Category (top 8)
             $prodCatAgg = DB::table('productos as p')
@@ -117,6 +156,7 @@ class PlatformScreen extends Screen
                     ],
                 ],
                 'recentProjects' => $recentProjects,
+                'featuredProducts' => $featuredProducts,
                 'productsByCategory' => [
                     [
                         'name'   => 'Productos por categoria',
@@ -213,6 +253,8 @@ class PlatformScreen extends Screen
                     'Proyectos'    => 'metrics.projects',
                     'Escenas'      => 'metrics.scenes',
                 ]),
+
+                new ProductGalleryLayout(),
 
                 Layout::columns([
                     ChartLineExample::make('charts', 'Actividad (6 meses)')
