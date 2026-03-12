@@ -2,6 +2,15 @@
 
 use Illuminate\Support\Str;
 
+$dumpBinaryPath = env('DB_DUMP_BINARY_PATH');
+
+if (! is_string($dumpBinaryPath) || trim($dumpBinaryPath) === '') {
+    $dumpBinaryPath = null;
+} else {
+    $normalizedDumpBinaryPath = str_replace('\\', DIRECTORY_SEPARATOR, trim($dumpBinaryPath));
+    $dumpBinaryPath = is_dir($normalizedDumpBinaryPath) ? $normalizedDumpBinaryPath : null;
+}
+
 return [
 
     /*
@@ -57,10 +66,9 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            // Configuración para spatie/laravel-backup: ubicación de mysqldump en Windows/Linux
-            // Establece DB_DUMP_BINARY_PATH en .env, por ejemplo en XAMPP: C:\\xampp\\mysql\\bin
+            // Si DB_DUMP_BINARY_PATH no existe en el sistema actual, se usa mysqldump disponible en PATH.
             'dump' => [
-                'dump_binary_path' => env('DB_DUMP_BINARY_PATH'),
+                'dump_binary_path' => $dumpBinaryPath,
                 'useSingleTransaction' => true,
             ],
             'options' => extension_loaded('pdo_mysql') ? array_filter([

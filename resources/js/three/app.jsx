@@ -13,12 +13,12 @@ import {
   rendererConfig,
 } from './config'
 
-function Floor({ kind }) {
+function Floor({ kind, width, depth }) {
   // Two simple materials: wood vs ceramic using basic colors for MVP
   const color = kind === 'wood' ? '#8b5a2b' : '#cfd8dc'
   return (
     <mesh rotation={[-Math.PI/2,0,0]} receiveShadow>
-      <planeGeometry args={[10,10,1,1]} />
+      <planeGeometry args={[width,depth,1,1]} />
       <meshStandardMaterial color={color} roughness={0.9} metalness={0.0} />
     </mesh>
   )
@@ -36,6 +36,11 @@ function Controls({
   onCover,
   onToggleCover,
   coverEnabled,
+  roomSizeCm,
+  onRoomSizeChange,
+  quoteSummary,
+  onGenerateQuote,
+  quoteLoading,
 }) {
   return (
     <div style={{position:'fixed', top:12, left:12, zIndex:10, width:260, background:'rgba(0,0,0,.65)', color:'#fff', padding:'12px', borderRadius:10, fontFamily:'system-ui,Arial,sans-serif'}}>
@@ -104,11 +109,83 @@ function Controls({
 
       <div style={{height:10}} />
 
+      <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Escenario / cuarto</div>
+      <div style={{padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, marginBottom:10}}>
+        <label style={{display:'block', fontSize:12, opacity:0.92, marginBottom:8}}>
+          Ancho (X): {roomSizeCm.width} cm
+          <input
+            type="range"
+            min={200}
+            max={3000}
+            step={10}
+            value={roomSizeCm.width}
+            onChange={(e) => onRoomSizeChange('width', Number(e.target.value))}
+            style={{width:'100%'}}
+          />
+        </label>
+        <label style={{display:'block', fontSize:12, opacity:0.92, marginBottom:8}}>
+          Largo (Z): {roomSizeCm.depth} cm
+          <input
+            type="range"
+            min={200}
+            max={3000}
+            step={10}
+            value={roomSizeCm.depth}
+            onChange={(e) => onRoomSizeChange('depth', Number(e.target.value))}
+            style={{width:'100%'}}
+          />
+        </label>
+        <label style={{display:'block', fontSize:12, opacity:0.92}}>
+          Alto: {roomSizeCm.height} cm
+          <input
+            type="range"
+            min={200}
+            max={800}
+            step={10}
+            value={roomSizeCm.height}
+            onChange={(e) => onRoomSizeChange('height', Number(e.target.value))}
+            style={{width:'100%'}}
+          />
+        </label>
+        <div style={{fontSize:11, opacity:0.75, marginTop:8}}>
+          Área del piso: {((roomSizeCm.width / 100) * (roomSizeCm.depth / 100)).toFixed(2)} m²
+        </div>
+      </div>
+
       <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Piso</div>
       <div style={{display:'flex', gap:8}}>
         <button onClick={() => setFloor('wood')} style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid #333', background: floor === 'wood' ? '#444' : '#222', color:'#fff', cursor:'pointer'}}>Madera</button>
         <button onClick={() => setFloor('ceramic')} style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid #333', background: floor === 'ceramic' ? '#444' : '#222', color:'#fff', cursor:'pointer'}}>Cerámica</button>
       </div>
+
+      <div style={{height:10}} />
+
+      <button
+        onClick={onGenerateQuote}
+        disabled={!quoteSummary?.ready || quoteLoading}
+        style={{width:'100%', padding:'10px 10px', borderRadius:8, border:'none', background: quoteSummary?.ready && !quoteLoading ? '#2563eb' : '#374151', color:'#fff', cursor: quoteSummary?.ready && !quoteLoading ? 'pointer' : 'not-allowed'}}
+        title={!quoteSummary?.ready ? 'Agrega una pieza para cotizar el escenario' : 'Genera un PDF con la cotización estimada'}
+      >
+        {quoteLoading ? 'Generando PDF...' : 'Generar cotización PDF'}
+      </button>
+
+      {quoteSummary?.ready && (
+        <div style={{marginTop:10, padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10}}>
+          <div style={{fontWeight:700, marginBottom:6}}>Resumen de cotización</div>
+          <div style={{fontSize:12, opacity:0.92, lineHeight:1.4}}>
+            Elemento: {quoteSummary.itemLabel}
+            <br />
+            Área: {quoteSummary.floorAreaLabel}
+            <br />
+            Precio por m²: {quoteSummary.unitPriceLabel}
+            <br />
+            Total estimado: {quoteSummary.totalLabel}
+          </div>
+          <div style={{fontSize:11, opacity:0.72, marginTop:8}}>
+            Precios referenciales en bolivianos; aún no se consultan desde base de datos.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -138,9 +215,27 @@ function Demo() {
   const [pieces, setPieces] = useState([])
   const [coverage, setCoverage] = useState({ canCompute: false, computed: false })
   const [coverEnabled, setCoverEnabled] = useState(false)
+  const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
+  const [quoteLoading, setQuoteLoading] = useState(false)
   const nextId = useRef(1)
   const lastEmissive = useRef({ obj: null, color: null })
   const controlsRef = useRef(null)
+
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', maximumFractionDigits: 0 }),
+    []
+  )
+
+  const roomSize = useMemo(
+    () => ({
+      width: roomSizeCm.width / 100,
+      depth: roomSizeCm.depth / 100,
+      height: roomSizeCm.height / 100,
+    }),
+    [roomSizeCm]
+  )
+
+  const wallThickness = 0.2
 
   const clearSelectionVisual = useCallback(() => {
     if (lastEmissive.current.obj && lastEmissive.current.obj.material?.emissive) {
@@ -160,9 +255,16 @@ function Demo() {
     return typeof obj.name === 'string' && obj.name.startsWith('Pieza-')
   }, [])
 
-  // Límites del cuarto: piso 10x10 centrado en 0,0 (plano XZ)
-  // Los cubos son de 1x1x1, así que el centro no debe pasar ±4.5
-  const roomLimits = useMemo(() => ({ min: -4.5, max: 4.5, y: 0.5 }), [])
+  const roomLimits = useMemo(
+    () => ({
+      minX: -roomSize.width / 2,
+      maxX: roomSize.width / 2,
+      minZ: -roomSize.depth / 2,
+      maxZ: roomSize.depth / 2,
+      y: 0.5,
+    }),
+    [roomSize]
+  )
 
   const selectedPieceId = useMemo(() => {
     if (!selected?.name?.startsWith('Pieza-')) return null
@@ -175,6 +277,8 @@ function Demo() {
     if (selectedPieceId == null) return null
     return pieces.find((p) => p.id === selectedPieceId) ?? null
   }, [pieces, selectedPieceId])
+
+  const quotePiece = useMemo(() => selectedPiece ?? pieces[0] ?? null, [selectedPiece, pieces])
 
   const updateSelectedScale = useCallback(
     (axis, value) => {
@@ -198,17 +302,28 @@ function Demo() {
       const sz = piece?.scaleXZ?.z ?? 1
       const halfX = (base[0] * sx) / 2
       const halfZ = (base[2] * sz) / 2
-      const minX = roomLimits.min + halfX
-      const maxX = roomLimits.max - halfX
-      const minZ = roomLimits.min + halfZ
-      const maxZ = roomLimits.max - halfZ
+      const minX = roomLimits.minX + halfX
+      const maxX = roomLimits.maxX - halfX
+      const minZ = roomLimits.minZ + halfZ
+      const maxZ = roomLimits.maxZ - halfZ
       return {
-        x: Math.min(maxX, Math.max(minX, pos.x)),
-        z: Math.min(maxZ, Math.max(minZ, pos.z)),
+        x: minX > maxX ? 0 : Math.min(maxX, Math.max(minX, pos.x)),
+        z: minZ > maxZ ? 0 : Math.min(maxZ, Math.max(minZ, pos.z)),
       }
     },
     [roomLimits]
   )
+
+  const updateRoomSize = useCallback((axis, value) => {
+    const limits = axis === 'height'
+      ? { min: 200, max: 800 }
+      : { min: 200, max: 3000 }
+
+    setRoomSizeCm((prev) => {
+      const nextValue = Math.round(Math.min(limits.max, Math.max(limits.min, Number(value) || prev[axis])))
+      return { ...prev, [axis]: nextValue }
+    })
+  }, [])
 
   const metersToCm = useCallback((m) => Math.round(m * 100), [])
   const cmToMeters = useCallback((cm) => cm / 100, [])
@@ -224,6 +339,18 @@ function Demo() {
     }
   }, [selectedPiece, metersToCm])
 
+  const quoteSizeCm = useMemo(() => {
+    if (!quotePiece) return null
+    const base = quotePiece.size
+    const sx = quotePiece.scaleXZ?.x ?? 1
+    const sz = quotePiece.scaleXZ?.z ?? 1
+    return {
+      x: metersToCm(base[0] * sx),
+      z: metersToCm(base[2] * sz),
+      y: metersToCm(base[1] ?? 0.12),
+    }
+  }, [quotePiece, metersToCm])
+
   const coverageData = useMemo(() => {
     if (!selectedPiece || !selectedSizeCm) return { canCompute: false, computed: false }
     const pieceM = {
@@ -231,7 +358,7 @@ function Demo() {
       z: selectedSizeCm.z / 100,
     }
     const pieceAreaM2 = pieceM.x * pieceM.z
-    const floorAreaM2 = 10 * 10
+    const floorAreaM2 = roomSize.width * roomSize.depth
     if (!Number.isFinite(pieceAreaM2) || pieceAreaM2 <= 0) return { canCompute: false, computed: false }
 
     const count = Math.ceil(floorAreaM2 / pieceAreaM2)
@@ -244,7 +371,7 @@ function Demo() {
       floorAreaM2,
       count,
     }
-  }, [selectedPiece, selectedSizeCm])
+  }, [selectedPiece, selectedSizeCm, roomSize])
 
   const handleCoverCompute = useCallback(() => {
     setCoverage(coverageData)
@@ -268,7 +395,15 @@ function Demo() {
         : { x: selectedPiece.scaleXZ?.x ?? 1, z: meters / base[2] }
 
       setPieces((prev) => {
-        const next = prev.map((p) => (p.id === selectedPiece.id ? { ...p, scaleXZ: nextScale } : p))
+        const next = prev.map((p) => {
+          if (p.id !== selectedPiece.id) return p
+          const currentPos = selected && selected.name === p.name
+            ? { x: selected.position.x, z: selected.position.z }
+            : { x: p.position[0], z: p.position[2] }
+          const updatedPiece = { ...p, scaleXZ: nextScale }
+          const clamped = clampPosForPiece(currentPos, updatedPiece)
+          return { ...updatedPiece, position: [clamped.x, roomLimits.y, clamped.z] }
+        })
         const updated = next.find((p) => p.id === selectedPiece.id)
         if (updated && selected && selected.name === updated.name) {
           const clamped = clampPosForPiece({ x: selected.position.x, z: selected.position.z }, updated)
@@ -289,13 +424,18 @@ function Demo() {
       const sz = selectedPiece?.scaleXZ?.z ?? 1
       const halfX = (base[0] * sx) / 2
       const halfZ = (base[2] * sz) / 2
-      const minX = roomLimits.min + halfX
-      const maxX = roomLimits.max - halfX
-      const minZ = roomLimits.min + halfZ
-      const maxZ = roomLimits.max - halfZ
-      const nextX = Math.min(maxX, Math.max(minX, selected.position.x + dx * step))
-      const nextZ = Math.min(maxZ, Math.max(minZ, selected.position.z + dz * step))
+      const minX = roomLimits.minX + halfX
+      const maxX = roomLimits.maxX - halfX
+      const minZ = roomLimits.minZ + halfZ
+      const maxZ = roomLimits.maxZ - halfZ
+      const nextX = minX > maxX ? 0 : Math.min(maxX, Math.max(minX, selected.position.x + dx * step))
+      const nextZ = minZ > maxZ ? 0 : Math.min(maxZ, Math.max(minZ, selected.position.z + dz * step))
       selected.position.set(nextX, roomLimits.y, nextZ)
+      if (selectedPiece?.id != null) {
+        setPieces((prev) => prev.map((p) => (
+          p.id === selectedPiece.id ? { ...p, position: [nextX, roomLimits.y, nextZ] } : p
+        )))
+      }
     },
     [selected, isMovable, roomLimits, selectedPiece]
   )
@@ -308,6 +448,7 @@ function Demo() {
         color: '#cfd8dc',
         roughness: 0.85,
         metalness: 0.0,
+        pricePerM2: 180,
       },
       plank: {
         label: 'Madera',
@@ -315,10 +456,40 @@ function Demo() {
         color: '#8b5a2b',
         roughness: 0.9,
         metalness: 0.0,
+        pricePerM2: 280,
       },
     }),
     []
   )
+
+  const quoteSummary = useMemo(() => {
+    if (!quotePiece || !quoteSizeCm) {
+      return { ready: false }
+    }
+
+    const catalogItem = pieceCatalog[quotePiece.kind] ?? null
+    if (!catalogItem) {
+      return { ready: false }
+    }
+
+    const floorAreaM2 = roomSize.width * roomSize.depth
+    const pieceAreaM2 = (quoteSizeCm.x / 100) * (quoteSizeCm.z / 100)
+    const estimatedUnits = Math.max(1, Math.ceil(floorAreaM2 / Math.max(pieceAreaM2, 0.0001)))
+    const total = floorAreaM2 * catalogItem.pricePerM2
+
+    return {
+      ready: true,
+      itemLabel: catalogItem.label,
+      floorAreaM2,
+      pieceAreaM2,
+      estimatedUnits,
+      unitPriceM2: catalogItem.pricePerM2,
+      total,
+      floorAreaLabel: `${floorAreaM2.toFixed(2)} m²`,
+      unitPriceLabel: currencyFormatter.format(catalogItem.pricePerM2),
+      totalLabel: currencyFormatter.format(total),
+    }
+  }, [quotePiece, quoteSizeCm, pieceCatalog, roomSize, currencyFormatter])
 
   const hasPiece = pieces.length > 0
   const canAdd = true
@@ -352,6 +523,113 @@ function Demo() {
     // Selección y enfoque: se asigna tras mount por referencia del evento de click.
     setSelected(null)
   }, [hasPiece, pieces, pieceCatalog, paletteKind, roomLimits.y])
+
+  const handleGenerateQuote = useCallback(async () => {
+    if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
+
+    setQuoteLoading(true)
+
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+      const response = await fetch('/3d/quotation', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/pdf',
+          'X-CSRF-TOKEN': csrfToken ?? '',
+        },
+        body: JSON.stringify({
+          scene_name: 'Cotización desde escena 3D',
+          floor_kind: floor,
+          room: {
+            width_cm: roomSizeCm.width,
+            depth_cm: roomSizeCm.depth,
+            height_cm: roomSizeCm.height,
+          },
+          piece: {
+            kind: quotePiece.kind,
+            width_cm: quoteSizeCm.x,
+            depth_cm: quoteSizeCm.z,
+            height_cm: quoteSizeCm.y,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`No se pudo generar la cotización (${response.status})`)
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i)
+      const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '').trim() : 'cotizacion-escena-3d.pdf'
+
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+    } catch (error) {
+      console.error(error)
+      window.alert('No se pudo generar la cotización PDF. Revisa la configuración actual e inténtalo de nuevo.')
+    } finally {
+      setQuoteLoading(false)
+    }
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm])
+
+  useEffect(() => {
+    if (selected && isMovable(selected) && selectedPiece) {
+      const clamped = clampPosForPiece({ x: selected.position.x, z: selected.position.z }, selectedPiece)
+      selected.position.set(clamped.x, roomLimits.y, clamped.z)
+    }
+
+    setPieces((prev) => {
+      let changed = false
+      const next = prev.map((piece) => {
+        const currentPos = selected && selected.name === piece.name
+          ? { x: selected.position.x, z: selected.position.z }
+          : { x: piece.position[0], z: piece.position[2] }
+        const clamped = clampPosForPiece(currentPos, piece)
+        const nextPosition = [clamped.x, roomLimits.y, clamped.z]
+        if (
+          piece.position[0] !== nextPosition[0] ||
+          piece.position[1] !== nextPosition[1] ||
+          piece.position[2] !== nextPosition[2]
+        ) {
+          changed = true
+          return { ...piece, position: nextPosition }
+        }
+        return piece
+      })
+
+      return changed ? next : prev
+    })
+  }, [roomLimits, clampPosForPiece, selected, selectedPiece, isMovable])
+
+  const eastOpeningDepth = useMemo(() => {
+    const desired = roomSize.depth * 0.45
+    return Math.min(Math.max(desired, 1.8), Math.max(roomSize.depth - 1.2, 1.8))
+  }, [roomSize.depth])
+
+  const eastSideDepth = useMemo(
+    () => Math.max((roomSize.depth - eastOpeningDepth) / 2, 0.5),
+    [roomSize.depth, eastOpeningDepth]
+  )
+
+  const eastLintelHeight = useMemo(
+    () => Math.min(0.55, Math.max(0.4, roomSize.height * 0.18)),
+    [roomSize.height]
+  )
+
+  const eastColumnHeight = useMemo(
+    () => Math.max(roomSize.height - eastLintelHeight, 0.8),
+    [roomSize.height, eastLintelHeight]
+  )
 
   // Teclado: flechas para mover, Shift acelera, Esc deselecciona
   useEffect(() => {
@@ -447,6 +725,11 @@ function Demo() {
         onCover={handleCoverCompute}
         onToggleCover={toggleCover}
         coverEnabled={coverEnabled}
+        roomSizeCm={roomSizeCm}
+        onRoomSizeChange={updateRoomSize}
+        quoteSummary={quoteSummary}
+        onGenerateQuote={handleGenerateQuote}
+        quoteLoading={quoteLoading}
       />
       <div style={{position:'fixed', top:12, right:12, zIndex:12, background:'rgba(0,0,0,.6)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif'}}>
         <div style={{display:'flex', gap:8}}>
@@ -527,7 +810,6 @@ function Demo() {
         <SoftShadows size={35} focus={0.5} samples={softShadowsBad ? 6 : 16} />
 
         <color attach="background" args={['#d0d0d0']} />
-        <fog attach="fog" args={['#d0d0d0', 8, 28]} />
 
         {/* Iluminación más cinematográfica: key/fill/rim */}
         <ambientLight intensity={0.25} />
@@ -547,13 +829,14 @@ function Demo() {
         {/* Postprocesado */}
         <PostFX enabled={postFXOn && postprocessingConfig.enabled} dofOn={dofOn} selected={selected} />
 
-        <Floor kind={floor} />
+        <Floor kind={floor} width={roomSize.width} depth={roomSize.depth} />
 
         {/* Preview de cobertura (instanced, liviano) */}
         <CoverPreview
           enabled={coverEnabled && coverage?.computed}
           piece={pieces[0]}
           pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
+          roomSize={roomSize}
         />
 
         {/* Piezas dinámicas (inicia vacío) */}
@@ -577,35 +860,35 @@ function Demo() {
             />
           </mesh>
         ))}
-        {/* Paredes (10x10 piso, centrado). Altura 3. Grosor 0.2 */}
+        {/* Paredes adaptables al tamaño configurado del cuarto */}
         {/* Pared norte */}
-        <mesh position={[0,1.5,-5]} castShadow onPointerDown={handleSelect} name="Pared-Norte">
-          <boxGeometry args={[10,3,0.2]} />
+        <mesh position={[0, roomSize.height / 2, -roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Norte">
+          <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
           <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
         </mesh>
         {/* Pared sur */}
-        <mesh position={[0,1.5,5]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
-          <boxGeometry args={[10,3,0.2]} />
+        <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
+          <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
           <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
         </mesh>
         {/* Pared oeste */}
-        <mesh position={[-5,1.5,0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-          <boxGeometry args={[0.2,3,10]} />
+        <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+          <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
           <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
         </mesh>
         {/* Pared este (con ventana simple hueco central) */}
         {/* Simplificación: dos columnas y travesaño arriba dejando hueco */}
         <group name="Pared-Este">
-          <mesh position={[5,1.5,0]} castShadow onPointerDown={handleSelect} name="Marco-Este-Arriba">
-            <boxGeometry args={[0.2,0.5,10]} />
+          <mesh position={[roomSize.width / 2, roomSize.height - eastLintelHeight / 2, 0]} castShadow onPointerDown={handleSelect} name="Marco-Este-Arriba">
+            <boxGeometry args={[wallThickness, eastLintelHeight, roomSize.depth]} />
             <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
           </mesh>
-          <mesh position={[5,1.0,-4]} castShadow onPointerDown={handleSelect} name="Columna-Este-1">
-            <boxGeometry args={[0.2,2,2]} />
+          <mesh position={[roomSize.width / 2, eastColumnHeight / 2, -(eastOpeningDepth / 2 + eastSideDepth / 2)]} castShadow onPointerDown={handleSelect} name="Columna-Este-1">
+            <boxGeometry args={[wallThickness, eastColumnHeight, eastSideDepth]} />
             <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
           </mesh>
-          <mesh position={[5,1.0,4]} castShadow onPointerDown={handleSelect} name="Columna-Este-2">
-            <boxGeometry args={[0.2,2,2]} />
+          <mesh position={[roomSize.width / 2, eastColumnHeight / 2, eastOpeningDepth / 2 + eastSideDepth / 2]} castShadow onPointerDown={handleSelect} name="Columna-Este-2">
+            <boxGeometry args={[wallThickness, eastColumnHeight, eastSideDepth]} />
             <meshStandardMaterial color="#e0e0e0" emissive="#000000" />
           </mesh>
         </group>
@@ -668,7 +951,7 @@ function PostFX({ enabled, dofOn, selected }) {
   )
 }
 
-function CoverPreview({ enabled, piece, pieceSizeCm }) {
+function CoverPreview({ enabled, piece, pieceSizeCm, roomSize }) {
   const MAX_PREVIEW = 800
   const instancesRef = useRef()
 
@@ -678,12 +961,11 @@ function CoverPreview({ enabled, piece, pieceSizeCm }) {
     const pieceD = pieceSizeCm.z / 100
     if (pieceW <= 0 || pieceD <= 0) return null
 
-    // Piso 10x10 centrado en 0,0 -> rango [-5,5] en X/Z
-    const cols = Math.max(1, Math.floor(10 / pieceW))
-    const rows = Math.max(1, Math.floor(10 / pieceD))
+    const cols = Math.max(1, Math.floor(roomSize.width / pieceW))
+    const rows = Math.max(1, Math.floor(roomSize.depth / pieceD))
     const total = Math.min(cols * rows, MAX_PREVIEW)
     return { pieceW, pieceD, cols, rows, total }
-  }, [enabled, piece, pieceSizeCm])
+  }, [enabled, piece, pieceSizeCm, roomSize])
 
   useEffect(() => {
     if (!instancesRef.current || !preview) return
@@ -693,8 +975,8 @@ function CoverPreview({ enabled, piece, pieceSizeCm }) {
     for (let r = 0; r < preview.rows; r++) {
       for (let c = 0; c < preview.cols; c++) {
         if (i >= preview.total) break
-        const x = -5 + preview.pieceW / 2 + c * preview.pieceW
-        const z = -5 + preview.pieceD / 2 + r * preview.pieceD
+        const x = -roomSize.width / 2 + preview.pieceW / 2 + c * preview.pieceW
+        const z = -roomSize.depth / 2 + preview.pieceD / 2 + r * preview.pieceD
         dummy.position.set(x, 0.5, z)
         dummy.rotation.set(0, 0, 0)
         dummy.scale.set(piece.scaleXZ?.x ?? 1, 1, piece.scaleXZ?.z ?? 1)
@@ -705,7 +987,7 @@ function CoverPreview({ enabled, piece, pieceSizeCm }) {
       if (i >= preview.total) break
     }
     inst.instanceMatrix.needsUpdate = true
-  }, [preview, piece])
+  }, [preview, piece, roomSize])
 
   if (!preview) return null
   return (

@@ -112,7 +112,7 @@ Route::screen('/examples/cards', ExampleCardsScreen::class)->name('platform.exam
 
 //Route::screen('idea', Idea::class, 'platform.screens.idea');
 
-// Auditoría: exportación CSV (definir ANTES para evitar colisión con Screen)
+// Auditoría: exportación PDF (definir ANTES para evitar colisión con Screen)
 Route::get('audit/export', [ActivityListScreen::class, 'export'])->name('platform.audit.export');
 
 // Auditoría

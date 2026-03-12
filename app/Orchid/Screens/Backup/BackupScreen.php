@@ -101,28 +101,27 @@ class BackupScreen extends Screen
 
     public function runNow(): RedirectResponse
     {
-        // Ejecutar backup sólo de la base de datos y sin notificaciones
-        // Ejecutar por cola para usar el entorno CLI (evita restricciones de sockets en procesos web en Windows)
         try {
-            Artisan::queue('backup:run', [
-                '--only-db' => true,
-                '--disable-notifications' => true,
-            ])->onQueue('backups');
-            Toast::info('Backup encolado. Se ejecutará en segundo plano y aparecerá en la lista al finalizar.');
-        } catch (\Throwable $e) {
-            Log::warning('Queue backup:run failed from UI', ['ex' => $e->getMessage()]);
-            // Fallback sin cola
             $exit = Artisan::call('backup:run', [
                 '--only-db' => true,
                 '--disable-notifications' => true,
             ]);
+
             $output = Artisan::output();
-            if ($exit === 0) {
-                Toast::success('Backup de base de datos generado correctamente.');
-            } else {
-                Log::warning('Backup run failed from UI (fallback)', ['exit' => $exit, 'output' => $output]);
-                Toast::warning('No se pudo generar el backup. Verifica DB_DUMP_BINARY_PATH y permisos. Revisa storage/logs/laravel.log.');
+
+            if ($exit !== 0) {
+                Log::warning('Backup run failed from UI', ['exit' => $exit, 'output' => $output]);
+                Toast::warning('No se pudo generar el backup. Revisa la configuración del volcado y los permisos del almacenamiento.');
+
+                return back();
             }
+
+            Toast::success('Backup de base de datos generado correctamente.');
+        } catch (\Throwable $e) {
+            Log::warning('Backup run exception from UI', ['exception' => $e->getMessage()]);
+            Toast::warning('No se pudo generar el backup. Revisa la configuración del volcado y los permisos del almacenamiento.');
+
+            return back();
         }
 
         // Registrar actividad de backup
@@ -153,18 +152,22 @@ class BackupScreen extends Screen
     public function cleanup(): RedirectResponse
     {
         try {
-            Artisan::queue('backup:clean')->onQueue('backups');
-            Toast::info('Limpieza encolada. Se ejecutará en segundo plano.');
-        } catch (\Throwable $e) {
             $exit = Artisan::call('backup:clean');
             $output = Artisan::output();
-            if ($exit === 0) {
-                Toast::success('Backups antiguos limpiados correctamente.');
-            } else {
+
+            if ($exit !== 0) {
                 Log::warning('Backup clean failed from UI', ['exit' => $exit, 'output' => $output]);
                 Toast::warning('No se pudo limpiar los backups antiguos. Revisa permisos y configuración.');
+
+                return back();
             }
+
+            Toast::success('Backups antiguos limpiados correctamente.');
+        } catch (\Throwable $e) {
+            Log::warning('Backup clean exception from UI', ['exception' => $e->getMessage()]);
+            Toast::warning('No se pudo limpiar los backups antiguos. Revisa permisos y configuración.');
         }
+
         return back();
     }
 
