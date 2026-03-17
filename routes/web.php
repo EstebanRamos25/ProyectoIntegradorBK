@@ -7,8 +7,7 @@ use App\Http\Controllers\ThreeQuotationController;
 
 // Root redirect to Orchid admin prefix (e.g., /admin)
 Route::get('/', function () {
-     $prefix = trim(config('platform.prefix', '/admin'), '/');
-     return redirect()->to('/' . $prefix);
+     return view('home');
 });
 
 // Convenience: redirect /login to Orchid's auth page under the admin prefix

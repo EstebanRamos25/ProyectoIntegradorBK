@@ -38,6 +38,30 @@ style.textContent = `.ripple{position:absolute;border-radius:50%;background:rgba
 @keyframes ripple{to{transform:scale(2.5);opacity:0}}`;
 document.head.appendChild(style);
 
+// Styles for product image modal (global)
+(function(){
+  const modalStyleId = 'orchidProductImageModalStyles';
+  if (document.getElementById(modalStyleId)) return;
+  const s = document.createElement('style');
+  s.id = modalStyleId;
+  s.textContent = `
+  .pi-modal-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.65);z-index:2000;padding:18px}
+  .pi-modal-overlay.pi-open{display:flex}
+  .pi-modal{width:min(960px, 96vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:0 18px 45px rgba(15,23,42,.35);overflow:hidden;display:flex;flex-direction:column}
+  .pi-modal-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(15,23,42,.08)}
+  .pi-modal-title{font-weight:600;font-size:13px;color:#0f172a;line-height:1.2}
+  .pi-modal-close{border:none;background:transparent;font-size:22px;line-height:1;color:#64748b;padding:4px 8px;cursor:pointer}
+  .pi-modal-body{padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+  .pi-modal-imgWrap{display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:12px;border:1px solid rgba(15,23,42,.06);padding:10px}
+  .pi-modal-img{max-width:100%;max-height:70vh;height:auto;display:block}
+  .pi-modal-toolbar{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+  .pi-modal-canvasWrap{display:none;align-items:center;justify-content:center;background:#0b1220;border-radius:12px;border:1px solid rgba(15,23,42,.08);height:min(540px, 65vh);overflow:hidden}
+  .pi-modal-canvasWrap.pi-show{display:flex}
+  .pi-modal-canvas{width:100%;height:100%;display:block}
+  `;
+  document.head.appendChild(s);
+})();
+
 // 3) Marcar body cuando es la vista de login (Orchid: .form-signin) con soporte Turbo
 (function(){
   const applyLoginBg = ()=>{
@@ -114,6 +138,145 @@ document.head.appendChild(style);
   applyTheme();
   window.addEventListener('turbo:load', applyTheme);
   window.addEventListener('turbo:render', applyTheme);
+})();
+
+// 5.1) Modal de imagen en listado de productos (y cualquier trigger con data-orchid-image-src)
+(function(){
+  const overlayId = 'productImageModalOverlay';
+  let cleanup3d = null;
+  let currentSrc = '';
+  let currentAlt = '';
+  let mode = 'image'; // 'image' | '3d'
+
+  const ensureModal = ()=>{
+    let overlay = document.getElementById(overlayId);
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = overlayId;
+    overlay.className = 'pi-modal-overlay';
+    overlay.setAttribute('role', 'presentation');
+    overlay.innerHTML = `
+      <div class="pi-modal" role="dialog" aria-modal="true" aria-label="Vista previa de imagen">
+        <div class="pi-modal-header">
+          <div class="pi-modal-title" id="piModalTitle">Vista previa</div>
+          <button type="button" class="pi-modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="pi-modal-body">
+          <div class="pi-modal-toolbar">
+            <button type="button" class="btn btn-sm btn-outline-primary" data-pi-mode="image">Imagen</button>
+            <button type="button" class="btn btn-sm btn-primary" data-pi-mode="3d">Textura 3D</button>
+          </div>
+          <div class="pi-modal-imgWrap" data-pi-pane="image">
+            <img class="pi-modal-img" alt="" src="" />
+          </div>
+          <div class="pi-modal-canvasWrap" data-pi-pane="3d">
+            <canvas class="pi-modal-canvas"></canvas>
+          </div>
+          <div style="font-size:11px;color:#64748b;line-height:1.3">
+            Tip: clic fuera o tecla Esc para cerrar.
+          </div>
+        </div>
+      </div>
+    `;
+
+    overlay.addEventListener('click', (e)=>{
+      // click fuera del modal
+      if (e.target === overlay) close();
+    });
+    overlay.querySelector('.pi-modal').addEventListener('click', (e)=>e.stopPropagation());
+    overlay.querySelector('.pi-modal-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e)=>{
+      const btn = e.target.closest('[data-pi-mode]');
+      if (!btn) return;
+      setMode(btn.getAttribute('data-pi-mode'));
+    });
+
+    document.body.appendChild(overlay);
+    return overlay;
+  };
+
+  const setMode = async (nextMode)=>{
+    const overlay = ensureModal();
+    if (nextMode !== 'image' && nextMode !== '3d') return;
+    mode = nextMode;
+
+    const paneImg = overlay.querySelector('[data-pi-pane="image"]');
+    const pane3d = overlay.querySelector('[data-pi-pane="3d"]');
+    const wrap3d = overlay.querySelector('.pi-modal-canvasWrap');
+
+    if (cleanup3d) {
+      cleanup3d();
+      cleanup3d = null;
+    }
+
+    if (mode === 'image') {
+      paneImg.style.display = '';
+      wrap3d.classList.remove('pi-show');
+      return;
+    }
+
+    // Modo 3D
+    paneImg.style.display = 'none';
+    wrap3d.classList.add('pi-show');
+
+    try {
+      const canvas = overlay.querySelector('canvas.pi-modal-canvas');
+      // import dinámico para no meter Three.js en el bundle inicial del admin
+      const mod = await import('./orchid/texturePreview3d.js');
+      cleanup3d = await mod.mountTexturePreview3d({
+        canvas,
+        imageUrl: currentSrc,
+      });
+    } catch (err) {
+      console.error(err);
+      window.alert('No se pudo cargar el preview 3D (ver consola).');
+      setMode('image');
+    }
+  };
+
+  const open = (src, alt='')=>{
+    const overlay = ensureModal();
+    currentSrc = src;
+    currentAlt = alt;
+    overlay.querySelector('.pi-modal-img').src = src;
+    overlay.querySelector('.pi-modal-img').alt = alt || 'Imagen';
+    overlay.querySelector('#piModalTitle').textContent = alt ? `Vista previa: ${alt}` : 'Vista previa';
+    overlay.classList.add('pi-open');
+    document.body.style.overflow = 'hidden';
+    setMode('image');
+  };
+
+  function close(){
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) return;
+    overlay.classList.remove('pi-open');
+    document.body.style.overflow = '';
+    if (cleanup3d) {
+      cleanup3d();
+      cleanup3d = null;
+    }
+    mode = 'image';
+  }
+
+  const onKeyDown = (e)=>{
+    if (e.key === 'Escape') {
+      const overlay = document.getElementById(overlayId);
+      if (overlay?.classList.contains('pi-open')) close();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  // Delegación: funciona con Turbo sin re-bind por página
+  document.addEventListener('click', (e)=>{
+    const trigger = e.target.closest('.orchid-image-modal-trigger,[data-orchid-image-src]');
+    if (!trigger) return;
+    const src = trigger.getAttribute('data-orchid-image-src') || trigger.dataset.orchidImageSrc;
+    if (!src) return;
+    e.preventDefault();
+    const alt = trigger.getAttribute('data-orchid-image-alt') || trigger.dataset.orchidImageAlt || '';
+    open(src, alt);
+  });
 })();
 
 // 6) Chatbot flotante global (usa /api/chatbot)

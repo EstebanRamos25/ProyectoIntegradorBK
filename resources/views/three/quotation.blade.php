@@ -247,7 +247,6 @@
                 <div class="note">
                     Estimación referencial basada en la cobertura del piso completo. No incluye desperdicio por cortes, instalación, transporte ni accesorios adicionales.
                     @if($quotation['prices_are_reference'])
-                        Los precios están configurados manualmente como referencia en bolivianos y todavía no se consultan desde la base de datos.
                     @endif
                 </div>
             </div>

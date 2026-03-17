@@ -41,15 +41,7 @@ class ProductoResource extends Resource
         return [
             TD::make('Imagen')->render(function ($producto) {
                 $image = $producto->attachment('image')->first();
-
-                static $cssInjected = false;
                 $alt = e($producto->Nombre);
-                $id = 'img-modal-' . e($producto->id);
-                $css = '';
-                if (!$cssInjected) {
-                    $css = '<style>.modal-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999;padding:1rem}.modal-overlay:target{display:flex}.modal-card{position:relative;background:#fff;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.2);padding:.5rem;max-width:90vw;max-height:90vh}.modal-card img{display:block;max-height:80vh;width:auto}.modal-close{position:absolute;top:.5rem;right:.75rem;font-size:1.5rem;color:#6b7280;text-decoration:none}</style>';
-                    $cssInjected = true;
-                }
 
                 $imageUrl = null;
                 if ($image) {
@@ -67,15 +59,14 @@ class ProductoResource extends Resource
 
                 if (!empty($imageUrl)) {
                     $escapedUrl = e($imageUrl);
-                    $imgCard = '<img src="' . $escapedUrl . '" alt="' . $alt . '" class="product-card-img" style="width:100%;height:180px;object-fit:cover;display:block;cursor:pointer">';
-                    $cardImageTag = '<a href="#' . $id . '">' . $imgCard . '</a>'
-                        . '<div id="' . $id . '" class="modal-overlay">'
-                            . '<a href="#" class="modal-close" aria-label="Cerrar">&times;</a>'
-                            . '<div class="modal-card">'
-                                . '<img src="' . $escapedUrl . '" alt="' . $alt . '">'
-                            . '</div>'
-                        . '</div>';
-                    $tableImgTag = '<img src="' . $escapedUrl . '" alt="' . $alt . '" style="width:80px;height:50px;object-fit:cover;display:block;border-radius:4px">';
+                    $imgCard = '<img src="' . $escapedUrl . '" alt="' . $alt . '" class="product-card-img" style="width:100%;height:180px;object-fit:cover;display:block">';
+                    $cardImageTag = '<button type="button" class="orchid-image-modal-trigger" data-orchid-image-src="' . $escapedUrl . '" data-orchid-image-alt="' . $alt . '" style="all:unset;display:block;cursor:pointer;width:100%">'
+                        . $imgCard
+                        . '</button>';
+
+                    $tableImgTag = '<button type="button" class="orchid-image-modal-trigger" data-orchid-image-src="' . $escapedUrl . '" data-orchid-image-alt="' . $alt . '" style="all:unset;display:inline-block;cursor:pointer">'
+                        . '<img src="' . $escapedUrl . '" alt="' . $alt . '" style="width:80px;height:50px;object-fit:cover;display:block;border-radius:4px">'
+                        . '</button>';
                 } else {
                     $svg = rawurlencode('<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="640" height="360"><rect fill="#f3f4f6" width="100%" height="100%"\/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9ca3af" font-size="28" font-family="Arial, Helvetica, sans-serif">Sin imagen<\/text><\/svg>');
                     $src = 'data:image/svg+xml;utf8,' . $svg;
@@ -110,7 +101,7 @@ class ProductoResource extends Resource
                 $cardHtml = '<div class="product-card" style="background:#fff;border:1px solid rgba(17,24,39,.06);border-radius:12px;overflow:hidden;box-shadow:0 6px 18px rgba(17,24,39,.06);display:flex;flex-direction:column">'
                     . $cardImageTag . $infoHtml . $actions . '</div>';
 
-                return $css . '<div class="product-table-img">' . $tableImgTag . '</div>' . $cardHtml;
+                return '<div class="product-table-img">' . $tableImgTag . '</div>' . $cardHtml;
             }),
 
             TD::make('id'),
