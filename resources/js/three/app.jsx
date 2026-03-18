@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Environment, SoftShadows, PerformanceMonitor } from '@react-three/drei'
+import { OrbitControls, Environment, SoftShadows, PerformanceMonitor, useTexture } from '@react-three/drei'
 import { EffectComposer, Bloom, SSAO, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { DepthOfField, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
 import { ACESFilmicToneMapping, SRGBColorSpace, Vector3, Object3D } from 'three'
@@ -12,6 +12,47 @@ import {
   postprocessingConfig,
   rendererConfig,
 } from './config'
+
+const WHITE_TEX_DATA_URL =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ffffff"/></svg>'
+  )
+
+function TexturedPieceMesh({ piece, onPointerDown }) {
+  const { gl } = useThree()
+  const map = useTexture(piece?.textureUrl || WHITE_TEX_DATA_URL)
+
+  useEffect(() => {
+    if (!map) return
+    map.colorSpace = SRGBColorSpace
+    map.wrapS = map.wrapT = 1000 // RepeatWrapping (evita importar constante extra)
+    map.repeat.set(1, 1)
+    map.anisotropy = Math.min(8, gl?.capabilities?.getMaxAnisotropy?.() ?? 8)
+    map.needsUpdate = true
+  }, [map, gl])
+
+  return (
+    <mesh
+      position={piece.position}
+      rotation={piece.rotation}
+      scale={[piece.scaleXZ?.x ?? 1, 1, piece.scaleXZ?.z ?? 1]}
+      castShadow
+      receiveShadow
+      onPointerDown={onPointerDown}
+      name={piece.name}
+    >
+      <boxGeometry args={piece.size} />
+      <meshStandardMaterial
+        map={map}
+        color={'#ffffff'}
+        emissive="#000000"
+        roughness={piece.roughness ?? 0.85}
+        metalness={piece.metalness ?? 0.0}
+      />
+    </mesh>
+  )
+}
 
 function Floor({ kind, width, depth }) {
   // Two simple materials: wood vs ceramic using basic colors for MVP
@@ -27,8 +68,11 @@ function Floor({ kind, width, depth }) {
 function Controls({
   floor,
   setFloor,
-  paletteKind,
-  setPaletteKind,
+  materials,
+  materialsLoading,
+  materialsError,
+  selectedMaterialId,
+  onSelectMaterial,
   onAdd,
   canAdd,
   addLabel,
@@ -42,24 +86,51 @@ function Controls({
   onGenerateQuote,
   quoteLoading,
 }) {
+  const selectedMaterial = useMemo(
+    () => materials?.find((m) => String(m.id) === String(selectedMaterialId)) ?? null,
+    [materials, selectedMaterialId]
+  )
+
   return (
     <div style={{position:'fixed', top:12, left:12, zIndex:10, width:260, background:'rgba(0,0,0,.65)', color:'#fff', padding:'12px', borderRadius:10, fontFamily:'system-ui,Arial,sans-serif'}}>
       <div style={{fontWeight:700, marginBottom:10}}>Catálogo</div>
 
-      <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Elemento</div>
-      <div style={{display:'flex', gap:8, marginBottom:10}}>
-        <button
-          onClick={() => setPaletteKind('tile')}
-          style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid #333', background: paletteKind === 'tile' ? '#1f6feb' : '#222', color:'#fff', cursor:'pointer'}}
-        >
-          Cerámica
-        </button>
-        <button
-          onClick={() => setPaletteKind('plank')}
-          style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid #333', background: paletteKind === 'plank' ? '#1f6feb' : '#222', color:'#fff', cursor:'pointer'}}
-        >
-          Madera
-        </button>
+      <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Material (desde Productos)</div>
+      <div style={{padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, marginBottom:10}}>
+        {materialsLoading && (
+          <div style={{fontSize:12, opacity:0.85}}>Cargando materiales...</div>
+        )}
+        {!materialsLoading && (materialsError || !materials?.length) && (
+          <div style={{fontSize:12, opacity:0.9, lineHeight:1.3}}>
+            No hay materiales disponibles desde Productos.
+            <div style={{fontSize:11, opacity:0.75, marginTop:6}}>
+              Sube imágenes a productos para habilitarlos en Experiencia 3D.
+            </div>
+          </div>
+        )}
+
+        {!materialsLoading && !!materials?.length && (
+          <>
+            <select
+              value={selectedMaterialId ?? ''}
+              onChange={(e) => onSelectMaterial(e.target.value ? Number(e.target.value) : null)}
+              style={{width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.14)', background:'#111827', color:'#fff'}}
+            >
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {selectedMaterial && (
+              <div style={{fontSize:11, opacity:0.75, marginTop:8, lineHeight:1.3}}>
+                Tipo: {selectedMaterial.kind === 'plank' ? 'Madera' : 'Cerámica'}
+                <br />
+                Precio ref. m²: {Number(selectedMaterial.price_per_m2 || 0).toFixed(0)} Bs
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <button
@@ -211,7 +282,10 @@ function Demo() {
   const [postFXOn, setPostFXOn] = useState(true)
   const [softShadowsBad, setSoftShadowsBad] = useState(false)
   const [dofOn, setDofOn] = useState(true)
-  const [paletteKind, setPaletteKind] = useState('tile')
+  const [materials, setMaterials] = useState([])
+  const [materialsLoading, setMaterialsLoading] = useState(true)
+  const [materialsError, setMaterialsError] = useState(null)
+  const [selectedMaterialId, setSelectedMaterialId] = useState(null)
   const [pieces, setPieces] = useState([])
   const [coverage, setCoverage] = useState({ canCompute: false, computed: false })
   const [coverEnabled, setCoverEnabled] = useState(false)
@@ -236,6 +310,47 @@ function Demo() {
   )
 
   const wallThickness = 0.2
+
+  useEffect(() => {
+    let alive = true
+    async function loadMaterials() {
+      setMaterialsLoading(true)
+      setMaterialsError(null)
+      try {
+        const resp = await fetch('/3d/materials', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.items) ? data.items : []
+        if (!alive) return
+        setMaterials(items)
+        setSelectedMaterialId((prev) => {
+          if (prev && items.some((m) => Number(m.id) === Number(prev))) return prev
+          return items[0]?.id ?? null
+        })
+      } catch (err) {
+        if (!alive) return
+        console.error(err)
+        setMaterials([])
+        setSelectedMaterialId(null)
+        setMaterialsError('No se pudo cargar el catálogo desde Productos.')
+      } finally {
+        if (alive) setMaterialsLoading(false)
+      }
+    }
+    loadMaterials()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const selectedMaterial = useMemo(
+    () => materials.find((m) => Number(m.id) === Number(selectedMaterialId)) ?? null,
+    [materials, selectedMaterialId]
+  )
 
   const clearSelectionVisual = useCallback(() => {
     if (lastEmissive.current.obj && lastEmissive.current.obj.material?.emissive) {
@@ -440,89 +555,66 @@ function Demo() {
     [selected, isMovable, roomLimits, selectedPiece]
   )
 
-  const pieceCatalog = useMemo(
-    () => ({
-      tile: {
-        label: 'Cerámica',
-        size: [1.0, 0.12, 1.0],
-        color: '#cfd8dc',
-        roughness: 0.85,
-        metalness: 0.0,
-        pricePerM2: 180,
-      },
-      plank: {
-        label: 'Madera',
-        size: [1.8, 0.12, 0.5],
-        color: '#8b5a2b',
-        roughness: 0.9,
-        metalness: 0.0,
-        pricePerM2: 280,
-      },
-    }),
-    []
-  )
-
   const quoteSummary = useMemo(() => {
-    if (!quotePiece || !quoteSizeCm) {
+    if (!quotePiece || !quoteSizeCm || !quotePiece?.material) {
       return { ready: false }
     }
 
-    const catalogItem = pieceCatalog[quotePiece.kind] ?? null
-    if (!catalogItem) {
-      return { ready: false }
-    }
+    const material = quotePiece.material
 
     const floorAreaM2 = roomSize.width * roomSize.depth
     const pieceAreaM2 = (quoteSizeCm.x / 100) * (quoteSizeCm.z / 100)
     const estimatedUnits = Math.max(1, Math.ceil(floorAreaM2 / Math.max(pieceAreaM2, 0.0001)))
-    const total = floorAreaM2 * catalogItem.pricePerM2
+    const unitPriceM2 = Number(material.price_per_m2 || 0)
+    const total = floorAreaM2 * unitPriceM2
 
     return {
       ready: true,
-      itemLabel: catalogItem.label,
+      itemLabel: material.name,
       floorAreaM2,
       pieceAreaM2,
       estimatedUnits,
-      unitPriceM2: catalogItem.pricePerM2,
+      unitPriceM2,
       total,
       floorAreaLabel: `${floorAreaM2.toFixed(2)} m²`,
-      unitPriceLabel: currencyFormatter.format(catalogItem.pricePerM2),
+      unitPriceLabel: currencyFormatter.format(unitPriceM2),
       totalLabel: currencyFormatter.format(total),
     }
-  }, [quotePiece, quoteSizeCm, pieceCatalog, roomSize, currencyFormatter])
+  }, [quotePiece, quoteSizeCm, roomSize, currencyFormatter])
 
   const hasPiece = pieces.length > 0
-  const canAdd = true
+  const canAdd = !materialsLoading && !materialsError && !!selectedMaterial
   const addLabel = hasPiece ? 'Reemplazar pieza' : 'Agregar pieza'
 
   const addOnePiece = useCallback(() => {
+    if (!selectedMaterial) return
     if (hasPiece) {
       const current = pieces[0]
-      const currentLabel = current?.kind ? pieceCatalog[current.kind]?.label : 'actual'
-      const nextLabel = pieceCatalog[paletteKind]?.label
+      const currentLabel = current?.material?.name ? current.material.name : 'actual'
+      const nextLabel = selectedMaterial.name
       const ok = window.confirm(
         `Ya existe una pieza (${currentLabel}).\n\nSi continúas, se borrará y se agregará: ${nextLabel}.\n\n¿Deseas reemplazarla?`
       )
       if (!ok) return
     }
-    const def = pieceCatalog[paletteKind]
     const id = nextId.current++
     const piece = {
       id,
-      kind: paletteKind,
+      kind: selectedMaterial.kind,
+      material: selectedMaterial,
       name: `Pieza-${id}`,
       position: [0, roomLimits.y, 0],
       rotation: [0, 0, 0],
-      size: def.size,
+      size: selectedMaterial.kind === 'plank' ? [1.8, 0.12, 0.5] : [1.0, 0.12, 1.0],
       scaleXZ: { x: 1, z: 1 },
-      color: def.color,
-      roughness: def.roughness,
-      metalness: def.metalness,
+      textureUrl: selectedMaterial.image_url,
+      roughness: selectedMaterial.kind === 'plank' ? 0.75 : 0.65,
+      metalness: 0.0,
     }
     setPieces([piece])
     // Selección y enfoque: se asigna tras mount por referencia del evento de click.
     setSelected(null)
-  }, [hasPiece, pieces, pieceCatalog, paletteKind, roomLimits.y])
+  }, [selectedMaterial, hasPiece, pieces, roomLimits.y])
 
   const handleGenerateQuote = useCallback(async () => {
     if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
@@ -716,8 +808,11 @@ function Demo() {
       <Controls
         floor={floor}
         setFloor={setFloor}
-        paletteKind={paletteKind}
-        setPaletteKind={setPaletteKind}
+        materials={materials}
+        materialsLoading={materialsLoading}
+        materialsError={materialsError}
+        selectedMaterialId={selectedMaterialId}
+        onSelectMaterial={setSelectedMaterialId}
         onAdd={addOnePiece}
         canAdd={canAdd}
         addLabel={addLabel}
@@ -837,28 +932,12 @@ function Demo() {
           piece={pieces[0]}
           pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
           roomSize={roomSize}
+          textureUrl={pieces[0]?.textureUrl}
         />
 
         {/* Piezas dinámicas (inicia vacío) */}
         {pieces.map((p) => (
-          <mesh
-            key={p.id}
-            position={p.position}
-            rotation={p.rotation}
-            scale={[p.scaleXZ?.x ?? 1, 1, p.scaleXZ?.z ?? 1]}
-            castShadow
-            receiveShadow
-            onPointerDown={handleSelect}
-            name={p.name}
-          >
-            <boxGeometry args={p.size} />
-            <meshStandardMaterial
-              color={p.color}
-              emissive="#000000"
-              roughness={p.roughness}
-              metalness={p.metalness}
-            />
-          </mesh>
+          <TexturedPieceMesh key={p.id} piece={p} onPointerDown={handleSelect} />
         ))}
         {/* Paredes adaptables al tamaño configurado del cuarto */}
         {/* Pared norte */}
@@ -951,9 +1030,18 @@ function PostFX({ enabled, dofOn, selected }) {
   )
 }
 
-function CoverPreview({ enabled, piece, pieceSizeCm, roomSize }) {
+function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl }) {
   const MAX_PREVIEW = 800
   const instancesRef = useRef()
+  const map = useTexture(textureUrl || WHITE_TEX_DATA_URL)
+
+  useEffect(() => {
+    if (!map) return
+    map.colorSpace = SRGBColorSpace
+    map.wrapS = map.wrapT = 1000
+    map.repeat.set(1, 1)
+    map.needsUpdate = true
+  }, [map])
 
   const preview = useMemo(() => {
     if (!enabled || !piece || !pieceSizeCm) return null
@@ -994,7 +1082,8 @@ function CoverPreview({ enabled, piece, pieceSizeCm, roomSize }) {
     <instancedMesh ref={instancesRef} args={[null, null, preview.total]} receiveShadow castShadow>
       <boxGeometry args={piece.size} />
       <meshStandardMaterial
-        color={piece.color}
+        map={map}
+        color={'#ffffff'}
         roughness={piece.roughness}
         metalness={piece.metalness}
         opacity={0.55}

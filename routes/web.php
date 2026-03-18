@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ThreeQuotationController;
+use App\Http\Controllers\ThreeMaterialsController;
 
 // Root redirect to Orchid admin prefix (e.g., /admin)
 Route::get('/', function () {
@@ -27,6 +28,9 @@ Route::get('/3d/room', function() {
 
 Route::post('/3d/quotation', [ThreeQuotationController::class, 'generate'])
      ->name('three.quotation');
+
+Route::get('/3d/materials', [ThreeMaterialsController::class, 'index'])
+     ->name('three.materials');
 
 // API Chatbot (OpenAI) - excluir CSRF explícitamente
 Route::post('/api/chatbot', [ChatbotController::class, 'handle'])

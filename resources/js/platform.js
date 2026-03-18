@@ -165,7 +165,7 @@ document.head.appendChild(style);
         <div class="pi-modal-body">
           <div class="pi-modal-toolbar">
             <button type="button" class="btn btn-sm btn-outline-primary" data-pi-mode="image">Imagen</button>
-            <button type="button" class="btn btn-sm btn-primary" data-pi-mode="3d">Textura 3D</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-pi-mode="3d">Textura 3D</button>
           </div>
           <div class="pi-modal-imgWrap" data-pi-pane="image">
             <img class="pi-modal-img" alt="" src="" />
@@ -184,9 +184,11 @@ document.head.appendChild(style);
       // click fuera del modal
       if (e.target === overlay) close();
     });
-    overlay.querySelector('.pi-modal').addEventListener('click', (e)=>e.stopPropagation());
+    const modal = overlay.querySelector('.pi-modal');
+    modal.addEventListener('click', (e)=>e.stopPropagation());
     overlay.querySelector('.pi-modal-close').addEventListener('click', close);
-    overlay.addEventListener('click', (e)=>{
+    // Toggle dentro del modal (no en el overlay), porque el modal corta la propagación
+    modal.addEventListener('click', (e)=>{
       const btn = e.target.closest('[data-pi-mode]');
       if (!btn) return;
       setMode(btn.getAttribute('data-pi-mode'));
@@ -202,8 +204,24 @@ document.head.appendChild(style);
     mode = nextMode;
 
     const paneImg = overlay.querySelector('[data-pi-pane="image"]');
-    const pane3d = overlay.querySelector('[data-pi-pane="3d"]');
     const wrap3d = overlay.querySelector('.pi-modal-canvasWrap');
+    const btnImage = overlay.querySelector('[data-pi-mode="image"]');
+    const btn3d = overlay.querySelector('[data-pi-mode="3d"]');
+
+    // Estilo de botón activo
+    if (btnImage && btn3d) {
+      if (mode === 'image') {
+        btnImage.classList.remove('btn-outline-primary');
+        btnImage.classList.add('btn-primary');
+        btn3d.classList.remove('btn-primary');
+        btn3d.classList.add('btn-outline-primary');
+      } else {
+        btn3d.classList.remove('btn-outline-primary');
+        btn3d.classList.add('btn-primary');
+        btnImage.classList.remove('btn-primary');
+        btnImage.classList.add('btn-outline-primary');
+      }
+    }
 
     if (cleanup3d) {
       cleanup3d();
