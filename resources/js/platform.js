@@ -358,6 +358,7 @@ document.head.appendChild(style);
       row.innerHTML = `<div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:1px;">${who}</div><div style="padding:6px 8px;border-radius:8px;background:${who==='Tú' ? '#e5e7eb' : '#eef2ff'};color:#111827;white-space:pre-wrap;">${text}</div>`;
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      return row;
     };
 
     btn.addEventListener('click', ()=>{
@@ -379,7 +380,12 @@ document.head.appendChild(style);
 
       const module = document.body.dataset.theme || '';
       const path = location.pathname || '';
-      appendMessage('Asistente', 'Pensando...');
+      const thinkingRow = appendMessage('Asistente', 'Pensando...');
+
+      // Evitar que quede colgado indefinidamente si el backend/modelo tarda demasiado.
+      const controller = new AbortController();
+      const timeoutMs = 120000; // 120s (timeout del UI)
+      const timeoutId = setTimeout(()=>controller.abort(), timeoutMs);
 
       try {
         const resp = await fetch('/api/chatbot', {
@@ -390,19 +396,33 @@ document.head.appendChild(style);
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
           },
           body: JSON.stringify({message, module, path}),
+          signal: controller.signal,
         });
-        const data = await resp.json();
-        messagesEl.lastChild.remove(); // quitar "Pensando..."
+
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (_) {
+          data = null;
+        }
 
         if (!resp.ok) {
-          appendMessage('Asistente', data.reply || `Error HTTP ${resp.status} al llamar al asistente.`);
+          const fallback = data && data.reply ? data.reply : `Error HTTP ${resp.status} al llamar al asistente.`;
+          appendMessage('Asistente', fallback);
           return;
         }
 
-        appendMessage('Asistente', data.reply || 'No se pudo obtener respuesta del asistente.');
+        appendMessage('Asistente', (data && data.reply) ? data.reply : 'No se pudo obtener respuesta del asistente.');
       } catch (err) {
-        messagesEl.lastChild.remove();
+        const isAbort = err && (err.name === 'AbortError');
+        if (isAbort) {
+          appendMessage('Asistente', 'El asistente está tardando demasiado en responder. Intenta nuevamente en unos segundos.');
+          return;
+        }
         appendMessage('Asistente', 'Ocurrió un error al contactar con el asistente. Detalle técnico: ' + (err && err.message ? err.message : 'sin detalles.'));
+      } finally {
+        clearTimeout(timeoutId);
+        if (thinkingRow && thinkingRow.parentNode) thinkingRow.parentNode.removeChild(thinkingRow);
       }
     });
   };

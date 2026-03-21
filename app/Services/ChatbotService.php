@@ -15,7 +15,7 @@ class ChatbotService
 
     public function chat(string $message, string $module = null): string
     {
-        $provider = env('CHAT_PROVIDER', 'ollama'); // por defecto ollama ahora
+        $provider = (string) config('services.chatbot.provider', 'ollama'); // por defecto ollama
 
         // 1) Consultas seguras a DB por módulo (si aplica)
         try {
@@ -56,6 +56,21 @@ class ChatbotService
         if ($module) {
             $prompt .= "\n\nContexto actual: MÓDULO = '{$module}'. Describe cómo ayudar en este módulo y luego responde.";
         }
+        return $prompt;
+    }
+
+    private function buildOllamaSystemPrompt(?string $module): string
+    {
+        $prompt = "Eres CERABOT (CERABOL). Responde en español, breve y claro.\n" .
+            "No inventes datos sensibles; si falta información, dilo.\n" .
+            "Si te piden instrucciones, responde con pasos numerados.\n" .
+            "Limita la respuesta a máximo 6 líneas o 5 viñetas.\n" .
+            "CERABOL: piezas y acabados cerámicos. Horario: Lun-Vie 09:00-18:00; Sáb 10:00-14:00.\n";
+
+        if ($module) {
+            $prompt .= "Contexto: módulo actual = '{$module}'.\n";
+        }
+
         return $prompt;
     }
 
@@ -105,11 +120,17 @@ class ChatbotService
         $url     = rtrim(config('services.ollama.url', 'http://127.0.0.1:11434'), '/');
         $model   = config('services.ollama.model', 'llama3');
         $timeout = (int) config('services.ollama.timeout', 60);
+        // Importante: el frontend aborta alrededor de 120s. Para evitar que quede "Pensando..." y luego corte,
+        // hacemos que el backend devuelva un error antes (dejando margen de red/parseo).
+        $timeout = min($timeout, 110);
 
         // Objetivo: respuestas rápidas y simples
-        $numPredict  = (int) env('OLLAMA_NUM_PREDICT', 120);
+        $numPredict  = (int) env('OLLAMA_NUM_PREDICT', 60);
         $temperature = (float) env('OLLAMA_TEMPERATURE', 0.2);
         $topP        = (float) env('OLLAMA_TOP_P', 0.9);
+        // Muy importante en máquinas con poca RAM: bajar num_ctx reduce el KV cache.
+        // Con 6GB de RAM, 1024 suele ser mucho más rápido que 4096 (evita swap).
+        $numCtx      = (int) env('OLLAMA_NUM_CTX', 1024);
 
         // Fallback (útil en Windows con poca RAM): probar modelos más ligeros si el principal falla.
         // Puedes sobreescribirlo con OLLAMA_FALLBACK_MODELS="qwen2.5:3b,phi3:mini"
@@ -137,13 +158,17 @@ class ChatbotService
 
         $payloadBase = [
             'messages' => [
-                ['role' => 'system', 'content' => $this->buildSystemPrompt($module)],
+                ['role' => 'system', 'content' => $this->buildOllamaSystemPrompt($module)],
                 ['role' => 'user',   'content' => $message],
             ],
             'stream' => false,
+            // Mantener el runner/modelo cargado para evitar cold-start entre preguntas.
+            // Ejemplos: "30s", "5m", "10m".
+            'keep_alive' => (string) env('OLLAMA_KEEP_ALIVE', '10m'),
             // Opciones compatibles con Ollama para acelerar respuesta
             'options' => [
                 'num_predict' => $numPredict,
+                'num_ctx' => $numCtx,
                 'temperature' => $temperature,
                 'top_p' => $topP,
             ],
@@ -152,12 +177,11 @@ class ChatbotService
         foreach ($fallbackModels as $candidateModel) {
             $payload = $payloadBase + ['model' => $candidateModel];
 
-            $attempts = 0;
-            $maxAttempts = 2; // 1 retry
+            // No reintentar timeouts: solo alarga la espera y el frontend terminará abortando.
+            // Si el modelo está realmente lento, es mejor devolver un mensaje claro y que el usuario reintente.
             $localTimeout = $timeout;
 
-            while ($attempts < $maxAttempts) {
-                $attempts++;
+            try {
                 try {
                     $response = Http::timeout($localTimeout)
                         ->post($url . '/api/chat', $payload);
@@ -203,18 +227,42 @@ class ChatbotService
                         'model' => $candidateModel,
                         'error' => $msg,
                     ]);
-                    if (stripos($msg, 'cURL error 28') !== false && $attempts < $maxAttempts) {
-                        $localTimeout += 15;
-                        continue;
+
+                    if (stripos($msg, 'cURL error 7') !== false || stripos($msg, 'Could not connect to server') !== false) {
+                        return $this->formatOllamaConnectionHelp($url, (string) $model);
                     }
                     if (stripos($msg, 'cURL error 28') !== false) {
-                        return 'Tiempo de espera agotado contactando a Ollama. Verifica que el servicio esté activo y el modelo cargado.';
+                        return 'El asistente está tardando demasiado en responder (timeout). Intenta de nuevo o usa una pregunta más específica/corta.';
                     }
                     return 'Error de comunicación con Ollama: ' . $msg;
                 }
+            } catch (\Throwable $e) {
+                // Si algo raro pasa fuera del request HTTP, pasar al siguiente modelo.
             }
         }
 
         return 'Ollama no pudo generar respuesta con el modelo configurado. En Windows, esto suele pasar por RAM insuficiente; prueba un modelo más liviano (ej. qwen2.5:3b o phi3:mini) y configúralo en OLLAMA_MODEL.';
+    }
+
+    private function formatOllamaConnectionHelp(string $url, string $model): string
+    {
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        $port = (string) (parse_url($url, PHP_URL_PORT) ?: '');
+
+        $base = "No se pudo conectar a Ollama en {$url}.";
+
+        // Mensaje más útil si apunta a localhost.
+        if (in_array($host, ['127.0.0.1', 'localhost'], true)) {
+            $portHint = $port !== '' ? ":{$port}" : '';
+            return $base . "\n\n" .
+                "Acciones sugeridas (Ubuntu/Debian):\n" .
+                "1) Instala Ollama: curl -fsSL https://ollama.com/install.sh | sh\n" .
+                "2) Inicia/activa el servicio: sudo systemctl enable --now ollama\n" .
+                "3) Verifica que responda: curl -sS http://127.0.0.1{$portHint}/api/version\n" .
+                "4) Descarga el modelo: ollama pull {$model}\n\n" .
+                "Si estás ejecutando PHP/Laravel dentro de un contenedor, 127.0.0.1 apunta al contenedor: ajusta OLLAMA_URL en .env para que apunte al host (por ejemplo http://host.docker.internal{$portHint} o la IP del host) y ejecuta: php artisan config:clear.";
+        }
+
+        return $base . " Verifica que el host/puerto sean correctos y que Ollama esté en ejecución. (Config: OLLAMA_URL en .env; luego php artisan config:clear).";
     }
 }

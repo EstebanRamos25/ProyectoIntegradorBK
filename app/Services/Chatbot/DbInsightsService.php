@@ -24,6 +24,24 @@ class DbInsightsService
         $module = $this->normalizeModule($module);
         $text = Str::lower($message);
 
+        // Respuestas instantáneas para saludos / cortesía (evita latencia del modelo)
+        if ($this->isGreetingOnly($text)) {
+            return "¡Hola! Soy CERABOT.\n\n" .
+                "Puedo ayudarte con dudas del sistema (productos, inventarios, proyectos, escenas, ventas, usuarios).\n" .
+                "Dime qué necesitas o en qué módulo estás trabajando.";
+        }
+
+        // Respuesta instantánea para "ayuda" / "qué puedes hacer" (evita latencia del modelo)
+        if ($this->isHelpRequest($text)) {
+            return $this->helpForModule($module);
+        }
+
+        // Vista general del módulo (lenguaje natural): "¿qué tengo/hay en este módulo?"
+        // Importante: responde desde BD cuando aplica, para mantenerlo rápido y completo.
+        if ($module !== '' && $this->isModuleOverviewRequest($text)) {
+            return $this->overviewForModule($module);
+        }
+
         // Resumen global cuando no hay módulo o cuando lo piden explícitamente
         if ($module === '' && $this->wantsSummary($text)) {
             return $this->summaryGlobal();
@@ -64,6 +82,184 @@ class DbInsightsService
         return null;
     }
 
+    private function isModuleOverviewRequest(string $text): bool
+    {
+        return Str::contains($text, [
+            'que tengo en este modulo',
+            'qué tengo en este modulo',
+            'que hay en este modulo',
+            'qué hay en este modulo',
+            'que hay en el modulo',
+            'qué hay en el modulo',
+            'que hay aqui',
+            'qué hay aquí',
+            'que puedo ver',
+            'qué puedo ver',
+            'que se hace en este modulo',
+            'qué se hace en este modulo',
+        ]);
+    }
+
+    private function overviewForModule(string $module): string
+    {
+        if ($module === 'productos') {
+            $total = Producto::query()->count();
+            $categories = Categoria::query()->count();
+            $invRows = Inventario::query()->count();
+            $units = (int) Inventario::query()->sum('Cantidad');
+
+            return "Estás en el módulo de PRODUCTOS. Resumen rápido:\n" .
+                "- Productos registrados: {$total}\n" .
+                "- Categorías: {$categories}\n" .
+                "- Inventario: {$units} unidades (en {$invRows} registros)\n\n" .
+                "Puedes pedirme: \"resumen de productos\", \"top 5 productos con más inventario\" o \"¿cuántas baldosas/cerámicos tenemos?\".";
+        }
+
+        if ($module === 'inventarios') {
+            $rows = Inventario::query()->count();
+            $units = (int) Inventario::query()->sum('Cantidad');
+            $productsWithInv = Inventario::query()->whereNotNull('producto_id')->distinct('producto_id')->count('producto_id');
+
+            return "Estás en el módulo de INVENTARIOS. Resumen rápido:\n" .
+                "- Registros de inventario: {$rows}\n" .
+                "- Unidades totales: {$units}\n" .
+                "- Productos con inventario: {$productsWithInv}\n\n" .
+                "Puedes pedirme: \"producto con más stock\" o \"top 5 productos por inventario\".";
+        }
+
+        if ($module === 'proyectos') {
+            $total = Proyecto::query()->count();
+            return "Estás en el módulo de PROYECTOS. Resumen rápido:\n" .
+                "- Proyectos registrados: {$total}\n\n" .
+                "Puedes pedirme: \"resumen de proyectos\" o \"proyectos recientes\".";
+        }
+
+        if ($module === 'escenas') {
+            $total = Escena::query()->count();
+            return "Estás en el módulo de ESCENAS. Resumen rápido:\n" .
+                "- Escenas registradas: {$total}\n\n" .
+                "Puedes pedirme: \"resumen de escenas\" o \"escenas recientes\".";
+        }
+
+        if ($module === 'ventas') {
+            $total = Venta::query()->count();
+            $salesTotal = (float) (Venta::query()->sum('Total') ?? 0);
+            return "Estás en el módulo de VENTAS. Resumen rápido:\n" .
+                "- Ventas registradas: {$total}\n" .
+                "- Total vendido: " . number_format($salesTotal, 2) . "\n\n" .
+                "Puedes pedirme: \"ventas de este mes\" o \"total vendido\".";
+        }
+
+        if ($module === 'categorias') {
+            $total = Categoria::query()->count();
+            return "Estás en el módulo de CATEGORÍAS. Resumen rápido:\n" .
+                "- Categorías registradas: {$total}\n\n" .
+                "Puedes pedirme: \"cuántas categorías hay\".";
+        }
+
+        if ($module === 'promociones') {
+            $total = Promocion::query()->count();
+            return "Estás en el módulo de PROMOCIONES. Resumen rápido:\n" .
+                "- Promociones registradas: {$total}\n\n" .
+                "Puedes pedirme: \"promociones recientes\".";
+        }
+
+        if ($module === 'usuarios') {
+            $total = User::query()->count();
+            return "Estás en el módulo de USUARIOS. Resumen rápido:\n" .
+                "- Usuarios registrados: {$total}\n\n" .
+                "Puedes pedirme: \"cuántos usuarios hay\".";
+        }
+
+        return "Estás en el módulo '{$module}'. Puedo darte un resumen si me dices: \"resumen\" o \"estadísticas\".";
+    }
+
+    private function isHelpRequest(string $text): bool
+    {
+        return Str::contains($text, [
+            'que puedes hacer',
+            'qué puedes hacer',
+            'que haces',
+            'qué haces',
+            'ayuda',
+            'help',
+            'como funciona',
+            'cómo funciona',
+            'como usar',
+            'cómo usar',
+            'guia',
+            'guía',
+        ]);
+    }
+
+    private function helpForModule(string $module): string
+    {
+        $base = "Puedo ayudarte con el sistema CERABOL. Ejemplos de preguntas rápidas:\n";
+
+        if ($module === 'productos') {
+            return $base .
+                "- \"¿Cuántos productos hay?\"\n" .
+                "- \"Resumen de productos\"\n" .
+                "- \"Top 5 productos con más inventario\"\n" .
+                "- \"¿Cuántas baldosas/cerámicos tenemos?\"";
+        }
+
+        if ($module === 'inventarios') {
+            return $base .
+                "- \"Resumen de inventarios\"\n" .
+                "- \"¿Cuántas unidades hay en total?\"\n" .
+                "- \"¿Qué producto tiene más stock?\"";
+        }
+
+        if ($module === 'proyectos') {
+            return $base .
+                "- \"Resumen de proyectos\"\n" .
+                "- \"¿Cuántos proyectos hay en total?\"\n" .
+                "- \"Proyectos recientes\"";
+        }
+
+        if ($module === 'ventas') {
+            return $base .
+                "- \"Resumen de ventas\"\n" .
+                "- \"Total vendido\"\n" .
+                "- \"Ventas de este mes\"";
+        }
+
+        return $base .
+            "- \"Resumen general\"\n" .
+            "- \"¿Cuántos productos/proyectos/ventas hay?\"\n" .
+            "Dime en qué módulo estás (productos, inventarios, proyectos, ventas, etc.) para darte respuestas más precisas.";
+    }
+
+    private function isGreetingOnly(string $text): bool
+    {
+        $t = trim($text);
+        if ($t === '') return false;
+
+        // Normalizar puntuación simple
+        $t = str_replace([',', '.', '!', '¡', '?', '¿'], ' ', $t);
+        $t = preg_replace('/\s+/', ' ', $t) ?: $t;
+        $t = trim($t);
+
+        // Casos comunes
+        $greetings = [
+            'hola',
+            'buenas',
+            'buenos dias',
+            'buenas tardes',
+            'buenas noches',
+            'hey',
+            'hello',
+        ];
+
+        if (in_array($t, $greetings, true)) return true;
+
+        // Variantes cortas: "hola cerabot", "hola bot"
+        if (Str::startsWith($t, 'hola ') && Str::length($t) <= 20) return true;
+
+        return false;
+    }
+
     private function normalizeModule(?string $module): string
     {
         $m = Str::lower(trim((string) $module));
@@ -95,7 +291,20 @@ class DbInsightsService
 
     private function wantsCount(string $text): bool
     {
-        return Str::contains($text, ['cuántos', 'cuantos', 'cantidad', 'total', 'en total', 'cuenta']);
+        return Str::contains($text, [
+            'cuántos',
+            'cuantos',
+            'cuántas',
+            'cuantas',
+            'cuánto',
+            'cuanto',
+            'cuánta',
+            'cuanta',
+            'cantidad',
+            'total',
+            'en total',
+            'cuenta',
+        ]);
     }
 
     private function wantsRegistered(string $text): bool
@@ -116,6 +325,16 @@ class DbInsightsService
     private function wantsMost(string $text): bool
     {
         return Str::contains($text, ['más', 'mas', 'mayor', 'maximo', 'máximo', 'top']);
+    }
+
+    private function wantsWhich(string $text): bool
+    {
+        return Str::contains($text, ['cual', 'cuál', 'que', 'qué']);
+    }
+
+    private function mentionsInventoryConcept(string $text): bool
+    {
+        return Str::contains($text, ['inventario', 'stock', 'cantidad', 'unidades', 'existenc', 'disponible']);
     }
 
     private function sinceDateForText(string $text): ?Carbon
@@ -166,14 +385,37 @@ class DbInsightsService
                 "- Unidades totales en inventario: {$units}";
         }
 
+        // Preguntas tipo: "¿Cuántas baldosas/azulejos cerámicos tenemos?"
+        // Aunque no digan "producto", si estamos en el módulo productos asumimos que buscan un conteo/suma.
+        // Nota: si también dicen "más/mas" (máximo), no entramos aquí para permitir la regla de "producto con mayor inventario".
+        if ($this->wantsCount($text) && !$this->wantsMost($text)) {
+            if ($this->mentionsCeramicTiles($text)) {
+                return $this->answerCeramicTilesCount();
+            }
+
+            $total = Producto::query()->count();
+            $invRows = Inventario::query()->count();
+            $units = (int) Inventario::query()->sum('Cantidad');
+            return "En productos hay {$total} registros. En inventario hay {$units} unidades (en {$invRows} registros).";
+        }
+
         // 1) Total de productos
-        if ($this->wantsCount($text) && Str::contains($text, ['producto'])) {
+        if ($this->wantsCount($text) && !$this->wantsMost($text) && Str::contains($text, ['producto'])) {
             $total = Producto::query()->count();
             return "En total hay {$total} productos registrados.";
         }
 
         // 2) Producto con mayor inventario (suma de inventarios)
-        if ($this->wantsMost($text) && Str::contains($text, ['producto', 'stock', 'inventario', 'cantidad'])) {
+        // Soportar lenguaje natural tipo: "¿Cuál es el producto que más tenemos?"
+        // En módulo productos, si preguntan por el "más" y mencionan producto (o inventario/cantidad), asumimos que buscan el mayor stock.
+        if (
+            $this->wantsMost($text)
+            && (
+                Str::contains($text, ['producto', 'productos'])
+                || $this->mentionsInventoryConcept($text)
+                || ($this->wantsWhich($text) && Str::contains($text, ['tenemos', 'hay']))
+            )
+        ) {
             $row = Inventario::query()
                 ->selectRaw('producto_id, SUM(COALESCE(Cantidad,0)) as total')
                 ->groupBy('producto_id')
@@ -214,6 +456,51 @@ class DbInsightsService
         }
 
         return null;
+    }
+
+    private function mentionsCeramicTiles(string $text): bool
+    {
+        return Str::contains($text, [
+            'baldos',
+            'azulej',
+            'ceramic',
+            'cerámic',
+            'porcelanat',
+            'gres',
+        ]);
+    }
+
+    private function answerCeramicTilesCount(): string
+    {
+        $keywords = ['%baldos%', '%azulej%', '%ceramic%', '%porcelanat%', '%gres%'];
+
+        $productMatches = Producto::query()
+            ->where(function ($q) use ($keywords) {
+                foreach ($keywords as $kw) {
+                    $q->orWhere('Nombre', 'like', $kw)
+                        ->orWhere('Descripcion', 'like', $kw);
+                }
+            });
+
+        $productsCount = (int) $productMatches->count();
+
+        // Sumar inventario asociado a esos productos
+        $units = (int) Inventario::query()
+            ->whereHas('producto', function ($q) use ($keywords) {
+                $q->where(function ($qq) use ($keywords) {
+                    foreach ($keywords as $kw) {
+                        $qq->orWhere('Nombre', 'like', $kw)
+                            ->orWhere('Descripcion', 'like', $kw);
+                    }
+                });
+            })
+            ->sum('Cantidad');
+
+        if ($productsCount === 0) {
+            return "No encontré productos que parezcan baldosas/azulejos cerámicos por nombre o descripción. Si me dices el nombre exacto (o una palabra clave del producto), lo busco mejor.";
+        }
+
+        return "Baldosas/cerámicos detectados (por nombre/descr.): {$productsCount} productos. Unidades totales en inventario para esos productos: {$units}.";
     }
 
     private function answerInventarios(string $text): ?string

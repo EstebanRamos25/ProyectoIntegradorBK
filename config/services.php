@@ -39,6 +39,10 @@ return [
         'model'   => env('OPENAI_MODEL', 'gpt-4.1-mini'),
     ],
 
+    'chatbot' => [
+        'provider' => env('CHAT_PROVIDER', 'ollama'),
+    ],
+
     'ollama' => [
         'url'    => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
         'model'  => env('OLLAMA_MODEL', 'llama3'),
