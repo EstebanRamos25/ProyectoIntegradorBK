@@ -4,7 +4,15 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment, SoftShadows, PerformanceMonitor, useTexture } from '@react-three/drei'
 import { EffectComposer, Bloom, SSAO, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { DepthOfField, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
-import { ACESFilmicToneMapping, SRGBColorSpace, Vector3, Object3D } from 'three'
+import {
+  ACESFilmicToneMapping,
+  SRGBColorSpace,
+  Vector3,
+  Object3D,
+  PerspectiveCamera,
+  WebGLRenderTarget,
+  GridHelper,
+} from 'three'
 import {
   cameraConfig,
   controlsConfig,
@@ -76,6 +84,15 @@ function Controls({
   onAdd,
   canAdd,
   addLabel,
+  scenes,
+  scenesLoading,
+  scenesError,
+  selectedSceneId,
+  sceneName,
+  onSceneNameChange,
+  onCreateNewScene,
+  onSaveScene,
+  onLoadScene,
   coverage,
   onCover,
   onToggleCover,
@@ -85,6 +102,7 @@ function Controls({
   quoteSummary,
   onGenerateQuote,
   quoteLoading,
+  inventoryStatus,
 }) {
   const selectedMaterial = useMemo(
     () => materials?.find((m) => String(m.id) === String(selectedMaterialId)) ?? null,
@@ -94,6 +112,66 @@ function Controls({
   return (
     <div style={{position:'fixed', top:12, left:12, zIndex:10, width:260, background:'rgba(0,0,0,.65)', color:'#fff', padding:'12px', borderRadius:10, fontFamily:'system-ui,Arial,sans-serif'}}>
       <div style={{fontWeight:700, marginBottom:10}}>Catálogo</div>
+
+      <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Escenarios (por usuario)</div>
+      <div style={{padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, marginBottom:10}}>
+        {scenesLoading && (
+          <div style={{fontSize:12, opacity:0.85}}>Cargando escenarios...</div>
+        )}
+
+        {!scenesLoading && scenesError && (
+          <div style={{fontSize:12, opacity:0.9, lineHeight:1.3}}>
+            {scenesError}
+          </div>
+        )}
+
+        {!scenesLoading && !scenesError && (
+          <>
+            <select
+              value={selectedSceneId ?? ''}
+              onChange={(e) => onLoadScene(e.target.value ? Number(e.target.value) : null)}
+              style={{width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.14)', background:'#111827', color:'#fff'}}
+              title={selectedSceneId ? 'Escena cargada' : 'Selecciona una escena guardada'}
+            >
+              <option value="">(Sin escena cargada)</option>
+              {scenes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+
+            <div style={{height:8}} />
+
+            <input
+              value={sceneName}
+              onChange={(e) => onSceneNameChange(e.target.value)}
+              placeholder="Nombre del escenario"
+              style={{width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.14)', background:'#0b1220', color:'#fff'}}
+            />
+
+            <div style={{display:'flex', gap:8, marginTop:8}}>
+              <button
+                onClick={onCreateNewScene}
+                style={{flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.12)', background:'#111827', color:'#fff', cursor:'pointer'}}
+                title="Crear un escenario nuevo"
+              >
+                Nuevo
+              </button>
+              <button
+                onClick={onSaveScene}
+                style={{flex:1, padding:'8px 10px', borderRadius:8, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer'}}
+                title="Guardar este escenario"
+              >
+                Guardar
+              </button>
+            </div>
+            <div style={{fontSize:11, opacity:0.75, marginTop:8, lineHeight:1.25}}>
+              Requiere inicio de sesión. Cada usuario ve solo sus escenarios.
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Material (desde Productos)</div>
       <div style={{padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, marginBottom:10}}>
@@ -127,6 +205,12 @@ function Controls({
                 Tipo: {selectedMaterial.kind === 'plank' ? 'Madera' : 'Cerámica'}
                 <br />
                 Precio ref. m²: {Number(selectedMaterial.price_per_m2 || 0).toFixed(0)} Bs
+                {selectedMaterial.piece_dimensions_cm?.locked && (
+                  <>
+                    <br />
+                    Formato: {Number(selectedMaterial.piece_dimensions_cm.width).toFixed(0)}×{Number(selectedMaterial.piece_dimensions_cm.depth).toFixed(0)} cm
+                  </>
+                )}
               </div>
             )}
           </>
@@ -173,7 +257,7 @@ function Controls({
             </button>
           </div>
           <div style={{fontSize:11, opacity:0.75, marginTop:8}}>
-            Preview limita a 800 piezas por rendimiento.
+            Preview usa hasta 800 instancias (muestreo automático en cuartos grandes).
           </div>
         </div>
       )}
@@ -221,6 +305,51 @@ function Controls({
         <div style={{fontSize:11, opacity:0.75, marginTop:8}}>
           Área del piso: {((roomSizeCm.width / 100) * (roomSizeCm.depth / 100)).toFixed(2)} m²
         </div>
+
+        {inventoryStatus?.canCompute && (
+          <div
+            style={{
+              marginTop:10,
+              padding:'10px',
+              borderRadius:10,
+              border:'1px solid rgba(255,255,255,.10)',
+              background:
+                inventoryStatus.canFulfill === false
+                  ? 'rgba(239,68,68,.18)'
+                  : 'rgba(34,197,94,.12)',
+            }}
+          >
+            <div style={{fontWeight:700, marginBottom:6}}>Inventario (cajas)</div>
+            <div style={{fontSize:12, opacity:0.92, lineHeight:1.35}}>
+              Requiere: {inventoryStatus.boxesRequired} cajas
+              <br />
+              Disponibles: {inventoryStatus.boxesAvailableTotal == null ? '—' : `${inventoryStatus.boxesAvailableTotal} cajas`}
+              {inventoryStatus.missingBoxes != null && inventoryStatus.missingBoxes > 0 && (
+                <>
+                  <br />
+                  Faltan: {inventoryStatus.missingBoxes} cajas
+                </>
+              )}
+              {inventoryStatus.canSingleLot === false && (
+                <>
+                  <br />
+                  Nota: no alcanza en un solo lote (podría mezclar lotes).
+                </>
+              )}
+            </div>
+            {inventoryStatus.canFulfill === false && (
+              <div style={{fontSize:11, opacity:0.85, marginTop:8}}>
+                Sugerencia: registra un ingreso de inventario (nuevo lote) antes de cotizar.
+              </div>
+            )}
+          </div>
+        )}
+
+        {inventoryStatus?.reason && (
+          <div style={{fontSize:11, opacity:0.75, marginTop:10, lineHeight:1.25}}>
+            Inventario: {inventoryStatus.reason}
+          </div>
+        )}
       </div>
 
       <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Piso</div>
@@ -233,9 +362,13 @@ function Controls({
 
       <button
         onClick={onGenerateQuote}
-        disabled={!quoteSummary?.ready || quoteLoading}
-        style={{width:'100%', padding:'10px 10px', borderRadius:8, border:'none', background: quoteSummary?.ready && !quoteLoading ? '#2563eb' : '#374151', color:'#fff', cursor: quoteSummary?.ready && !quoteLoading ? 'pointer' : 'not-allowed'}}
-        title={!quoteSummary?.ready ? 'Agrega una pieza para cotizar el escenario' : 'Genera un PDF con la cotización estimada'}
+        disabled={!quoteSummary?.ready || quoteLoading || inventoryStatus?.canFulfill === false}
+        style={{width:'100%', padding:'10px 10px', borderRadius:8, border:'none', background: quoteSummary?.ready && !quoteLoading && inventoryStatus?.canFulfill !== false ? '#2563eb' : '#374151', color:'#fff', cursor: quoteSummary?.ready && !quoteLoading && inventoryStatus?.canFulfill !== false ? 'pointer' : 'not-allowed'}}
+        title={
+          !quoteSummary?.ready
+            ? 'Agrega una pieza para cotizar el escenario'
+            : (inventoryStatus?.canFulfill === false ? 'Stock insuficiente según inventario' : 'Genera un PDF con la cotización estimada')
+        }
       >
         {quoteLoading ? 'Generando PDF...' : 'Generar cotización PDF'}
       </button>
@@ -253,7 +386,7 @@ function Controls({
             Total estimado: {quoteSummary.totalLabel}
           </div>
           <div style={{fontSize:11, opacity:0.72, marginTop:8}}>
-            Precios referenciales en bolivianos; aún no se consultan desde base de datos.
+            Precio por m² desde Productos. Stock por cajas desde Inventario (si está registrado).
           </div>
         </div>
       )}
@@ -291,9 +424,17 @@ function Demo() {
   const [coverEnabled, setCoverEnabled] = useState(false)
   const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
   const [quoteLoading, setQuoteLoading] = useState(false)
+  const [scenes, setScenes] = useState([])
+  const [scenesLoading, setScenesLoading] = useState(true)
+  const [scenesError, setScenesError] = useState(null)
+  const [selectedSceneId, setSelectedSceneId] = useState(null)
+  const [sceneName, setSceneName] = useState('')
+  const pendingSceneDataRef = useRef(null)
+  const autoLoadedSceneRef = useRef(false)
   const nextId = useRef(1)
   const lastEmissive = useRef({ obj: null, color: null })
   const controlsRef = useRef(null)
+  const r3fRef = useRef({ gl: null, scene: null })
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', maximumFractionDigits: 0 }),
@@ -310,6 +451,17 @@ function Demo() {
   )
 
   const wallThickness = 0.2
+
+  const roomLimits = useMemo(
+    () => ({
+      minX: -roomSize.width / 2,
+      maxX: roomSize.width / 2,
+      minZ: -roomSize.depth / 2,
+      maxZ: roomSize.depth / 2,
+      y: 0.5,
+    }),
+    [roomSize]
+  )
 
   useEffect(() => {
     let alive = true
@@ -347,10 +499,281 @@ function Demo() {
     }
   }, [])
 
+  useEffect(() => {
+    let alive = true
+    async function loadScenes() {
+      setScenesLoading(true)
+      setScenesError(null)
+      try {
+        const resp = await fetch('/3d/scenes', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (resp.status === 401 || resp.status === 419) {
+          if (!alive) return
+          setScenes([])
+          setScenesError('Inicia sesión para guardar y cargar escenarios.')
+          return
+        }
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.items) ? data.items : []
+        if (!alive) return
+        setScenes(items)
+      } catch (err) {
+        if (!alive) return
+        console.error(err)
+        setScenes([])
+        setScenesError('No se pudieron cargar los escenarios guardados.')
+      } finally {
+        if (alive) setScenesLoading(false)
+      }
+    }
+
+    loadScenes()
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const selectedMaterial = useMemo(
     () => materials.find((m) => Number(m.id) === Number(selectedMaterialId)) ?? null,
     [materials, selectedMaterialId]
   )
+
+  const buildScenePayload = useCallback(() => {
+    return {
+      version: 1,
+      floor,
+      roomSizeCm,
+      selectedMaterialId,
+      coverEnabled,
+      pieces: pieces.map((p) => ({
+        kind: p.kind,
+        material_id: p?.material?.id ?? null,
+        position: p.position,
+        rotation: p.rotation,
+        size: p.size,
+        scaleXZ: p.scaleXZ,
+        lockSizeXZ: !!p.lockSizeXZ,
+      })),
+    }
+  }, [floor, roomSizeCm, selectedMaterialId, coverEnabled, pieces])
+
+  const resetSceneState = useCallback(() => {
+    setSelectedSceneId(null)
+    setSceneName('')
+    setPieces([])
+    setSelected(null)
+    setCoverage({ canCompute: false, computed: false })
+    setCoverEnabled(false)
+    window.localStorage.removeItem('three.lastSceneId')
+  }, [])
+
+  const hydrateScene = useCallback((sceneData) => {
+    if (!sceneData || typeof sceneData !== 'object') return
+    setFloor(sceneData.floor === 'ceramic' ? 'ceramic' : 'wood')
+
+    if (sceneData.roomSizeCm && typeof sceneData.roomSizeCm === 'object') {
+      setRoomSizeCm((prev) => ({
+        ...prev,
+        width: Number(sceneData.roomSizeCm.width) || prev.width,
+        depth: Number(sceneData.roomSizeCm.depth) || prev.depth,
+        height: Number(sceneData.roomSizeCm.height) || prev.height,
+      }))
+    }
+
+    if (sceneData.selectedMaterialId != null) {
+      setSelectedMaterialId(Number(sceneData.selectedMaterialId))
+    }
+
+    setCoverEnabled(!!sceneData.coverEnabled)
+
+    const nextPieces = Array.isArray(sceneData.pieces) ? sceneData.pieces : []
+    if (!nextPieces.length) {
+      setPieces([])
+      setSelected(null)
+      setCoverage({ canCompute: false, computed: false })
+      return
+    }
+
+    // (MVP) el editor actualmente maneja 1 pieza: cargamos la primera.
+    const raw = nextPieces[0]
+    const material = materials.find((m) => Number(m.id) === Number(raw?.material_id)) ?? selectedMaterial
+    const id = nextId.current++
+    const piece = {
+      id,
+      kind: raw?.kind === 'plank' ? 'plank' : 'tile',
+      material: material ?? null,
+      name: `Pieza-${id}`,
+      position: Array.isArray(raw?.position) ? raw.position : [0, roomLimits.y, 0],
+      rotation: Array.isArray(raw?.rotation) ? raw.rotation : [0, 0, 0],
+      size: Array.isArray(raw?.size) ? raw.size : (material?.kind === 'plank' ? [1.8, 0.12, 0.5] : [1.0, 0.12, 1.0]),
+      scaleXZ: raw?.scaleXZ && typeof raw.scaleXZ === 'object' ? raw.scaleXZ : { x: 1, z: 1 },
+      lockSizeXZ: !!raw?.lockSizeXZ,
+      textureUrl: material?.image_url || WHITE_TEX_DATA_URL,
+      roughness: material?.kind === 'plank' ? 0.75 : 0.65,
+      metalness: 0.0,
+    }
+    setPieces([piece])
+    setSelected(null)
+    setCoverage({ canCompute: false, computed: false })
+  }, [materials, selectedMaterial, roomLimits.y])
+
+  // Si se seleccionó un escenario antes de cargar materiales, diferimos la hidratación.
+  useEffect(() => {
+    const pending = pendingSceneDataRef.current
+    if (!pending) return
+    if (!materialsLoading) {
+      pendingSceneDataRef.current = null
+      hydrateScene(pending)
+    }
+  }, [materialsLoading, hydrateScene])
+
+  const loadSceneById = useCallback(async (sceneId) => {
+    if (!sceneId) {
+      setSelectedSceneId(null)
+      window.localStorage.removeItem('three.lastSceneId')
+      return
+    }
+
+    try {
+      const resp = await fetch(`/3d/scenes/${sceneId}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+
+      if (resp.status === 401 || resp.status === 419) {
+        setScenesError('Inicia sesión para cargar escenarios.')
+        return
+      }
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      const item = data?.item
+      setSelectedSceneId(Number(item?.id) || null)
+      setSceneName(String(item?.name || ''))
+      window.localStorage.setItem('three.lastSceneId', String(item?.id || ''))
+
+      if (materialsLoading) {
+        pendingSceneDataRef.current = item?.data ?? null
+      } else {
+        hydrateScene(item?.data ?? null)
+      }
+    } catch (err) {
+      console.error(err)
+      window.alert('No se pudo cargar el escenario.')
+    }
+  }, [materialsLoading, hydrateScene])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const isNew = params.get('new') === '1'
+    const sceneIdParam = params.get('sceneId')
+    const requestedSceneId = sceneIdParam ? Number(sceneIdParam) : null
+
+    if (isNew) {
+      autoLoadedSceneRef.current = true
+      resetSceneState()
+      return
+    }
+
+    if (requestedSceneId && Number.isFinite(requestedSceneId) && requestedSceneId > 0) {
+      autoLoadedSceneRef.current = true
+      loadSceneById(requestedSceneId)
+    }
+  }, [loadSceneById, resetSceneState])
+
+  useEffect(() => {
+    if (autoLoadedSceneRef.current) return
+    if (scenesLoading) return
+    if (scenesError) return
+    if (!scenes?.length) return
+
+    const lastId = Number(window.localStorage.getItem('three.lastSceneId') || '')
+    if (!Number.isFinite(lastId) || lastId <= 0) return
+    if (!scenes.some((s) => Number(s.id) === lastId)) return
+
+    autoLoadedSceneRef.current = true
+    loadSceneById(lastId)
+  }, [scenesLoading, scenesError, scenes, loadSceneById])
+
+  const createNewScene = useCallback(() => {
+    const ok = window.confirm('Esto creará un escenario nuevo y limpiará la escena actual. ¿Continuar?')
+    if (!ok) return
+    resetSceneState()
+  }, [resetSceneState])
+
+  const saveScene = useCallback(async () => {
+    if (scenesError) {
+      window.alert('Inicia sesión para guardar escenarios.')
+      return
+    }
+
+    const name = String(sceneName || '').trim()
+    if (!name) {
+      window.alert('Escribe un nombre para el escenario antes de guardar.')
+      return
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+    const payload = { name, data: buildScenePayload() }
+
+    try {
+      const isUpdate = !!selectedSceneId
+      const url = isUpdate ? `/3d/scenes/${selectedSceneId}` : '/3d/scenes'
+      const method = isUpdate ? 'PUT' : 'POST'
+      const resp = await fetch(url, {
+        method,
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': csrfToken ?? '',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (resp.status === 401 || resp.status === 419) {
+        window.alert('Inicia sesión para guardar escenarios.')
+        return
+      }
+
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => null)
+        const msg = errBody?.message || 'No se pudo guardar el escenario.'
+        throw new Error(msg)
+      }
+
+      const data = await resp.json()
+      const item = data?.item
+      const savedId = Number(item?.id) || null
+      if (savedId) {
+        setSelectedSceneId(savedId)
+        window.localStorage.setItem('three.lastSceneId', String(savedId))
+      }
+
+      // refrescar lista
+      const listResp = await fetch('/3d/scenes', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (listResp.ok) {
+        const listData = await listResp.json()
+        setScenes(Array.isArray(listData?.items) ? listData.items : [])
+      }
+
+      window.alert('Escenario guardado.')
+    } catch (err) {
+      console.error(err)
+      window.alert(String(err?.message || 'No se pudo guardar el escenario.'))
+    }
+  }, [sceneName, selectedSceneId, buildScenePayload, scenesError])
 
   const clearSelectionVisual = useCallback(() => {
     if (lastEmissive.current.obj && lastEmissive.current.obj.material?.emissive) {
@@ -370,17 +793,6 @@ function Demo() {
     return typeof obj.name === 'string' && obj.name.startsWith('Pieza-')
   }, [])
 
-  const roomLimits = useMemo(
-    () => ({
-      minX: -roomSize.width / 2,
-      maxX: roomSize.width / 2,
-      minZ: -roomSize.depth / 2,
-      maxZ: roomSize.depth / 2,
-      y: 0.5,
-    }),
-    [roomSize]
-  )
-
   const selectedPieceId = useMemo(() => {
     if (!selected?.name?.startsWith('Pieza-')) return null
     const idStr = selected.name.replace('Pieza-', '')
@@ -394,6 +806,122 @@ function Demo() {
   }, [pieces, selectedPieceId])
 
   const quotePiece = useMemo(() => selectedPiece ?? pieces[0] ?? null, [selectedPiece, pieces])
+
+  const inventoryStatus = useMemo(() => {
+    const material = quotePiece?.material ?? selectedMaterial
+    if (!material) return { canCompute: false }
+
+    const floorAreaM2 = (roomSizeCm.width / 100) * (roomSizeCm.depth / 100)
+    const m2PerBox = Number(material?.packaging?.m2_per_box || 0)
+    const boxesAvailableTotal = Number(material?.inventory?.boxes_available_total ?? NaN)
+
+    if (!Number.isFinite(floorAreaM2) || floorAreaM2 <= 0) return { canCompute: false }
+    if (!Number.isFinite(m2PerBox) || m2PerBox <= 0) {
+      return {
+        canCompute: false,
+        reason: 'Falta m² por caja en el producto para calcular cajas requeridas.',
+      }
+    }
+
+    const boxesRequired = Math.max(1, Math.ceil(floorAreaM2 / m2PerBox))
+
+    if (!Number.isFinite(boxesAvailableTotal)) {
+      return {
+        canCompute: true,
+        boxesRequired,
+        boxesAvailableTotal: null,
+        missingBoxes: null,
+        canFulfill: null,
+        canSingleLot: null,
+      }
+    }
+
+    const lots = Array.isArray(material?.inventory?.lots) ? material.inventory.lots : []
+    const bestLot = lots
+      .map((l) => ({ lot_code: l?.lot_code ?? null, boxes: Number(l?.boxes_available || 0) }))
+      .sort((a, b) => b.boxes - a.boxes)[0]
+    const bestLotBoxes = bestLot ? Number(bestLot.boxes || 0) : 0
+
+    const missingBoxes = Math.max(0, boxesRequired - boxesAvailableTotal)
+    const canFulfill = boxesAvailableTotal >= boxesRequired
+    const canSingleLot = bestLotBoxes >= boxesRequired
+
+    return {
+      canCompute: true,
+      boxesRequired,
+      boxesAvailableTotal,
+      missingBoxes,
+      canFulfill,
+      canSingleLot,
+      bestLotCode: bestLot?.lot_code ?? null,
+    }
+  }, [quotePiece, selectedMaterial, roomSizeCm])
+
+  const captureTopDownSnapshot = useCallback(() => {
+    const gl = r3fRef.current?.gl
+    const scene = r3fRef.current?.scene
+    if (!gl || !scene) return null
+
+    const w = 1024
+    const h = 1024
+
+    const far = Math.max(roomSize.width, roomSize.depth, roomSize.height) * 10 + 50
+    const fov = 45
+    const cam = new PerspectiveCamera(fov, 1, 0.1, far)
+
+    const halfW = roomSize.width / 2
+    const halfD = roomSize.depth / 2
+    const radius = Math.sqrt(halfW * halfW + halfD * halfD)
+    const dist = radius / Math.tan((fov * Math.PI) / 360)
+
+    // Vista superior inclinada (muestra piso + paredes). El offset en Z evita colinealidad perfecta.
+    cam.position.set(0, dist * 1.15, dist * 0.95)
+    cam.up.set(0, 1, 0)
+    cam.lookAt(0, 0, 0)
+    cam.updateProjectionMatrix()
+    cam.updateMatrixWorld()
+
+    // Grid temporal para el snapshot (no afecta UI).
+    const gridSize = Math.max(roomSize.width, roomSize.depth)
+    const divisions = Math.max(10, Math.min(80, Math.round(gridSize / 0.25)))
+    const grid = new GridHelper(gridSize, divisions, 0x334155, 0x94a3b8)
+    grid.position.set(0, 0.01, 0)
+    scene.add(grid)
+
+    const target = new WebGLRenderTarget(w, h)
+    const prevTarget = gl.getRenderTarget()
+    const prevXrEnabled = gl.xr.enabled
+    gl.xr.enabled = false
+
+    gl.setRenderTarget(target)
+    gl.clear()
+    gl.render(scene, cam)
+
+    const pixels = new Uint8Array(w * h * 4)
+    gl.readRenderTargetPixels(target, 0, 0, w, h, pixels)
+
+    gl.setRenderTarget(prevTarget)
+    gl.xr.enabled = prevXrEnabled
+    target.dispose()
+
+    scene.remove(grid)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    const imageData = ctx.createImageData(w, h)
+    // WebGL entrega los píxeles con origen abajo-izquierda; invertimos Y para PNG.
+    for (let row = 0; row < h; row++) {
+      const srcStart = (h - row - 1) * w * 4
+      const destStart = row * w * 4
+      imageData.data.set(pixels.subarray(srcStart, srcStart + w * 4), destStart)
+    }
+    ctx.putImageData(imageData, 0, 0)
+    return canvas.toDataURL('image/png')
+  }, [roomSize])
 
   const updateSelectedScale = useCallback(
     (axis, value) => {
@@ -500,6 +1028,7 @@ function Demo() {
   const updateSelectedSizeCm = useCallback(
     (axis, cmValue) => {
       if (!selectedPiece) return
+      if (selectedPiece.lockSizeXZ) return
       const cmClamped = Math.max(10, Math.min(400, cmValue))
       const meters = cmToMeters(cmClamped)
       const base = selectedPiece.size
@@ -598,6 +1127,13 @@ function Demo() {
       if (!ok) return
     }
     const id = nextId.current++
+
+    const dims = selectedMaterial?.piece_dimensions_cm
+    const hasFixedDims = !!(dims && dims.locked && Number(dims.width) > 0 && Number(dims.depth) > 0)
+    const fixedSize = hasFixedDims
+      ? [Number(dims.width) / 100, 0.12, Number(dims.depth) / 100]
+      : null
+
     const piece = {
       id,
       kind: selectedMaterial.kind,
@@ -605,8 +1141,9 @@ function Demo() {
       name: `Pieza-${id}`,
       position: [0, roomLimits.y, 0],
       rotation: [0, 0, 0],
-      size: selectedMaterial.kind === 'plank' ? [1.8, 0.12, 0.5] : [1.0, 0.12, 1.0],
+      size: fixedSize ?? (selectedMaterial.kind === 'plank' ? [1.8, 0.12, 0.5] : [1.0, 0.12, 1.0]),
       scaleXZ: { x: 1, z: 1 },
+      lockSizeXZ: !!fixedSize,
       textureUrl: selectedMaterial.image_url,
       roughness: selectedMaterial.kind === 'plank' ? 0.75 : 0.65,
       metalness: 0.0,
@@ -619,9 +1156,28 @@ function Demo() {
   const handleGenerateQuote = useCallback(async () => {
     if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
 
+    if (inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false) {
+      window.alert(
+        `Stock insuficiente para cotizar en base al inventario.\n\n` +
+          `Requiere: ${inventoryStatus.boxesRequired} cajas\n` +
+          `Disponibles: ${inventoryStatus.boxesAvailableTotal} cajas\n` +
+          `Faltan: ${inventoryStatus.missingBoxes} cajas\n\n` +
+          `Registra un ingreso de inventario (nuevo lote) o ajusta el tamaño del cuarto.`
+      )
+      return
+    }
+
     setQuoteLoading(true)
 
     try {
+      let snapshotTop = null
+      try {
+        snapshotTop = captureTopDownSnapshot()
+      } catch (err) {
+        console.warn('No se pudo capturar la vista superior para el PDF.', err)
+        snapshotTop = null
+      }
+
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
       const response = await fetch('/3d/quotation', {
         method: 'POST',
@@ -632,8 +1188,10 @@ function Demo() {
           'X-CSRF-TOKEN': csrfToken ?? '',
         },
         body: JSON.stringify({
+          material_id: quotePiece?.material?.id ?? null,
           scene_name: 'Cotización desde escena 3D',
           floor_kind: floor,
+          snapshot_top_png_data_url: snapshotTop,
           room: {
             width_cm: roomSizeCm.width,
             depth_cm: roomSizeCm.depth,
@@ -672,7 +1230,7 @@ function Demo() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm])
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot])
 
   useEffect(() => {
     if (selected && isMovable(selected) && selectedPiece) {
@@ -816,6 +1374,15 @@ function Demo() {
         onAdd={addOnePiece}
         canAdd={canAdd}
         addLabel={addLabel}
+        scenes={scenes}
+        scenesLoading={scenesLoading}
+        scenesError={scenesError}
+        selectedSceneId={selectedSceneId}
+        sceneName={sceneName}
+        onSceneNameChange={setSceneName}
+        onCreateNewScene={createNewScene}
+        onSaveScene={saveScene}
+        onLoadScene={loadSceneById}
         coverage={{ ...coverage, ...coverageData, canCompute: coverageData.canCompute, computed: coverage.computed }}
         onCover={handleCoverCompute}
         onToggleCover={toggleCover}
@@ -825,6 +1392,7 @@ function Demo() {
         quoteSummary={quoteSummary}
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
+        inventoryStatus={inventoryStatus}
       />
       <div style={{position:'fixed', top:12, right:12, zIndex:12, background:'rgba(0,0,0,.6)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif'}}>
         <div style={{display:'flex', gap:8}}>
@@ -853,6 +1421,11 @@ function Demo() {
           {isMovable(selected) && selectedPiece && (
             <div style={{marginBottom:10}}>
               <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Tamaño (cm, sin altura)</div>
+              {selectedPiece.lockSizeXZ && (
+                <div style={{fontSize:11, opacity:0.75, marginBottom:8, lineHeight:1.25}}>
+                  Tamaño fijo según el formato del producto.
+                </div>
+              )}
               <label style={{display:'block', fontSize:12, opacity:0.9, marginBottom:8}}>
                 Largo (X): {selectedSizeCm?.x ?? 0} cm
                 <input
@@ -862,6 +1435,7 @@ function Demo() {
                   step={1}
                   value={selectedSizeCm?.x ?? 100}
                   onChange={(e) => updateSelectedSizeCm('x', Number(e.target.value))}
+                  disabled={!!selectedPiece.lockSizeXZ}
                   style={{width:'100%'}}
                 />
               </label>
@@ -874,6 +1448,7 @@ function Demo() {
                   step={1}
                   value={selectedSizeCm?.z ?? 100}
                   onChange={(e) => updateSelectedSizeCm('z', Number(e.target.value))}
+                  disabled={!!selectedPiece.lockSizeXZ}
                   style={{width:'100%'}}
                 />
               </label>
@@ -897,6 +1472,9 @@ function Demo() {
         dpr={rendererConfig.dpr}
         camera={{ position: cameraConfig.position, fov: cameraConfig.fov }}
         onPointerMissed={handlePointerMissed}
+        onCreated={(state) => {
+          r3fRef.current = { gl: state.gl, scene: state.scene }
+        }}
       >
         <RendererSetup />
 
@@ -1049,10 +1627,18 @@ function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl }) {
     const pieceD = pieceSizeCm.z / 100
     if (pieceW <= 0 || pieceD <= 0) return null
 
-    const cols = Math.max(1, Math.floor(roomSize.width / pieceW))
-    const rows = Math.max(1, Math.floor(roomSize.depth / pieceD))
+    const fullCols = Math.max(1, Math.ceil(roomSize.width / pieceW))
+    const fullRows = Math.max(1, Math.ceil(roomSize.depth / pieceD))
+    const fullTotal = fullCols * fullRows
+
+    // Si excede MAX_PREVIEW, agrupamos piezas (stride) para seguir cubriendo todo el piso.
+    const stride = fullTotal <= MAX_PREVIEW ? 1 : Math.ceil(Math.sqrt(fullTotal / MAX_PREVIEW))
+    const cols = Math.max(1, Math.ceil(fullCols / stride))
+    const rows = Math.max(1, Math.ceil(fullRows / stride))
+    const tileW = pieceW * stride
+    const tileD = pieceD * stride
     const total = Math.min(cols * rows, MAX_PREVIEW)
-    return { pieceW, pieceD, cols, rows, total }
+    return { cols, rows, total, stride, tileW, tileD }
   }, [enabled, piece, pieceSizeCm, roomSize])
 
   useEffect(() => {
@@ -1063,11 +1649,13 @@ function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl }) {
     for (let r = 0; r < preview.rows; r++) {
       for (let c = 0; c < preview.cols; c++) {
         if (i >= preview.total) break
-        const x = -roomSize.width / 2 + preview.pieceW / 2 + c * preview.pieceW
-        const z = -roomSize.depth / 2 + preview.pieceD / 2 + r * preview.pieceD
+        const x = -roomSize.width / 2 + preview.tileW / 2 + c * preview.tileW
+        const z = -roomSize.depth / 2 + preview.tileD / 2 + r * preview.tileD
         dummy.position.set(x, 0.5, z)
         dummy.rotation.set(0, 0, 0)
-        dummy.scale.set(piece.scaleXZ?.x ?? 1, 1, piece.scaleXZ?.z ?? 1)
+        const sx = (piece.scaleXZ?.x ?? 1) * (preview.stride ?? 1)
+        const sz = (piece.scaleXZ?.z ?? 1) * (preview.stride ?? 1)
+        dummy.scale.set(sx, 1, sz)
         dummy.updateMatrix()
         inst.setMatrixAt(i, dummy.matrix)
         i++

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Inventario;
+use App\Models\Producto;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -13,8 +15,10 @@ class ThreeQuotationController extends Controller
     public function generate(Request $request): Response
     {
         $validated = $request->validate([
+            'material_id' => ['nullable', 'integer', 'exists:productos,id'],
             'scene_name' => ['nullable', 'string', 'max:120'],
             'floor_kind' => ['nullable', 'string', 'max:40'],
+            'snapshot_top_png_data_url' => ['nullable', 'string', 'max:5000000'],
             'room.width_cm' => ['required', 'numeric', 'min:200', 'max:3000'],
             'room.depth_cm' => ['required', 'numeric', 'min:200', 'max:3000'],
             'room.height_cm' => ['required', 'numeric', 'min:200', 'max:800'],
@@ -45,9 +49,57 @@ class ThreeQuotationController extends Controller
         $floorAreaM2 = round(($room['width_cm'] / 100) * ($room['depth_cm'] / 100), 2);
         $pieceAreaM2 = round(($piece['width_cm'] / 100) * ($piece['depth_cm'] / 100), 4);
         $estimatedUnits = max(1, (int) ceil($floorAreaM2 / max($pieceAreaM2, 0.0001)));
-        $unitPriceM2 = (float) ($catalogItem['price_per_m2'] ?? 0);
+
+        // Si el frontend manda un material real (Producto), usamos su precio y empaques.
+        $materialId = $validated['material_id'] ?? null;
+        $producto = null;
+        if ($materialId) {
+            $producto = Producto::query()->with(['categoria'])->find($materialId);
+        }
+
+        $unitPriceM2 = $producto ? (float) ($producto->Precio ?? 0) : (float) ($catalogItem['price_per_m2'] ?? 0);
         $estimatedUnitPrice = round($pieceAreaM2 * $unitPriceM2, 0);
         $estimatedTotal = round($floorAreaM2 * $unitPriceM2, 0);
+
+        // Inventario / lote (por cajas)
+        $m2PerBox = $producto ? (float) ($producto->M2_Por_Caja ?? 0) : 0.0;
+        $boxesRequired = null;
+        if ($m2PerBox > 0) {
+            $boxesRequired = max(1, (int) ceil($floorAreaM2 / $m2PerBox));
+        }
+
+        $inventoryCheck = null;
+        if ($producto && $boxesRequired !== null) {
+            $lotsAgg = Inventario::query()
+                ->where('producto_id', $producto->id)
+                ->selectRaw('Codigo_Lote as lot_code, SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)) as boxes')
+                ->groupBy('lot_code')
+                ->get()
+                ->map(function ($row): array {
+                    return [
+                        'lot_code' => $row->lot_code !== null ? (string) $row->lot_code : null,
+                        'boxes_available' => (int) ($row->boxes ?? 0),
+                    ];
+                })
+                ->filter(fn (array $r) => (int) $r['boxes_available'] > 0)
+                ->values();
+
+            $boxesAvailableTotal = (int) $lotsAgg->sum('boxes_available');
+            $bestLot = $lotsAgg->sortByDesc('boxes_available')->first();
+            $bestLotBoxes = $bestLot ? (int) $bestLot['boxes_available'] : 0;
+
+            $inventoryCheck = [
+                'product_id' => (int) $producto->id,
+                'boxes_required' => $boxesRequired,
+                'boxes_available_total' => $boxesAvailableTotal,
+                'missing_boxes' => max(0, $boxesRequired - $boxesAvailableTotal),
+                'can_fulfill_total' => $boxesAvailableTotal >= $boxesRequired,
+                'can_fulfill_single_lot' => $bestLotBoxes >= $boxesRequired,
+                'best_lot_code' => $bestLot['lot_code'] ?? null,
+                'best_lot_boxes_available' => $bestLotBoxes,
+                'lots' => $lotsAgg,
+            ];
+        }
 
         $quotation = [
             'scene_name' => (string) ($validated['scene_name'] ?? 'Escena 3D personalizada'),
@@ -56,6 +108,20 @@ class ThreeQuotationController extends Controller
             'currency_symbol' => (string) config('three_quotation.currency_symbol', 'Bs'),
             'prices_are_reference' => (bool) config('three_quotation.prices_are_reference', true),
             'floor_kind' => $this->floorLabel((string) ($validated['floor_kind'] ?? 'custom')),
+            'snapshot_top_png_data_url' => $this->sanitizeSnapshotDataUrl($validated['snapshot_top_png_data_url'] ?? null),
+            'material' => $producto ? [
+                'id' => (int) $producto->id,
+                'name' => (string) ($producto->Nombre ?? ''),
+                'brand' => (string) ($producto->Marca ?? ''),
+                'model' => (string) ($producto->Modelo ?? ''),
+                'unit_sale' => (string) ($producto->Unidad_Venta ?: 'caja'),
+                'm2_per_box' => $m2PerBox > 0 ? $m2PerBox : null,
+                'pieces_per_box' => $producto->Piezas_Por_Caja !== null ? (int) $producto->Piezas_Por_Caja : null,
+                'category' => [
+                    'id' => (int) ($producto->categoria_id ?? 0),
+                    'name' => (string) (optional($producto->categoria)->Nombre ?? ''),
+                ],
+            ] : null,
             'room' => $room,
             'piece' => $piece,
             'summary' => [
@@ -65,7 +131,10 @@ class ThreeQuotationController extends Controller
                 'unit_price_m2' => $unitPriceM2,
                 'estimated_unit_price' => $estimatedUnitPrice,
                 'estimated_total' => $estimatedTotal,
+                'boxes_required' => $boxesRequired,
+                'm2_per_box' => $m2PerBox > 0 ? $m2PerBox : null,
             ],
+            'inventory_check' => $inventoryCheck,
             'plan_svg' => $this->buildPlanSvg($room, $piece),
         ];
 
@@ -74,6 +143,27 @@ class ThreeQuotationController extends Controller
         ])->setPaper('a4', 'portrait');
 
         return $pdf->download('cotizacion-escena-3d-'.now()->format('Ymd_His').'.pdf');
+    }
+
+    protected function sanitizeSnapshotDataUrl(?string $dataUrl): ?string
+    {
+        if (!$dataUrl) {
+            return null;
+        }
+
+        $dataUrl = trim($dataUrl);
+
+        // Solo permitimos PNG embebido para DomPDF.
+        if (!str_starts_with($dataUrl, 'data:image/png;base64,')) {
+            return null;
+        }
+
+        // Límite adicional por seguridad/memoria (base64). 5MB de string ya se valida arriba.
+        if (strlen($dataUrl) > 5_000_000) {
+            return null;
+        }
+
+        return $dataUrl;
     }
 
     protected function floorLabel(string $floorKind): string

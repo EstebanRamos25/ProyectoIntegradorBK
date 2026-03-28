@@ -14,7 +14,29 @@ class Producto extends Model
 {
     use HasFactory, AsSource, Filterable, Attachable, LogsActivity;
 
-    protected $fillable = ["Nombre", "Descripcion", "Precio", "Marca", "Modelo", "Stock_Minimo", "categoria_id"];
+    protected $fillable = [
+        "Nombre",
+        "Descripcion",
+        "Precio",
+        "M2_Por_Caja",
+        "Piezas_Por_Caja",
+        "Unidad_Venta",
+        "Ancho_Pieza_Cm",
+        "Largo_Pieza_Cm",
+        "Marca",
+        "Modelo",
+        "Stock_Minimo",
+        "categoria_id",
+    ];
+
+    protected $casts = [
+        'Precio' => 'float',
+        'M2_Por_Caja' => 'float',
+        'Piezas_Por_Caja' => 'int',
+        'Ancho_Pieza_Cm' => 'float',
+        'Largo_Pieza_Cm' => 'float',
+        'Stock_Minimo' => 'int',
+    ];
 
     public function categoria()
     {

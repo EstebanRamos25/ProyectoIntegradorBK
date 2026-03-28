@@ -27,7 +27,38 @@ class ProductoResource extends Resource
         return [
             Input::make('Nombre')->title('Nombre')->placeholder('Ingresa el nombre del producto'),
             Input::make('Descripcion')->title('Descripcion')->placeholder('Ingresa la descripcion del producto'),
-            Input::make('Precio')->type('number')->title('Precio')->step(0.01)->placeholder('Ingresa el precio del producto'),
+            Input::make('Precio')
+                ->type('number')
+                ->title('Precio por m²')
+                ->step(0.01)
+                ->placeholder('Ej: 180.00'),
+            Input::make('M2_Por_Caja')
+                ->type('number')
+                ->step(0.0001)
+                ->title('Cobertura (m²) por caja')
+                ->placeholder('Ej: 1.80'),
+            Input::make('Piezas_Por_Caja')
+                ->type('number')
+                ->title('Piezas por caja')
+                ->placeholder('Ej: 10'),
+            Select::make('Unidad_Venta')
+                ->title('Unidad de venta')
+                ->options([
+                    'caja' => 'Caja (cerrada)',
+                    'm2' => 'm² (solo referencia)',
+                ])
+                ->empty('Selecciona')
+                ->help('En cerámica normalmente se vende por caja cerrada, aunque el precio se cotice por m².'),
+            Input::make('Ancho_Pieza_Cm')
+                ->type('number')
+                ->step(0.01)
+                ->title('Ancho de pieza (cm)')
+                ->placeholder('Ej: 45'),
+            Input::make('Largo_Pieza_Cm')
+                ->type('number')
+                ->step(0.01)
+                ->title('Largo de pieza (cm)')
+                ->placeholder('Ej: 45'),
             Input::make('Marca')->title('Marca')->placeholder('Ingresa la marca del producto'),
             Input::make('Modelo')->title('Modelo')->placeholder('Ingresa el modelo del producto'),
             Input::make('Stock_Minimo')->type('number')->title('Stock Minimo')->placeholder('Ingresa el stock mínimo'),
@@ -78,6 +109,12 @@ class ProductoResource extends Resource
                     'Nombre' => $producto->Nombre,
                     'Descripción' => $producto->Descripcion,
                     'Precio' => '$ ' . number_format((float)$producto->Precio, 2, '.', ','),
+                    'm² por caja' => $producto->M2_Por_Caja,
+                    'Piezas por caja' => $producto->Piezas_Por_Caja,
+                    'Unidad de venta' => $producto->Unidad_Venta,
+                    'Formato (cm)' => ($producto->Ancho_Pieza_Cm && $producto->Largo_Pieza_Cm)
+                        ? ($producto->Ancho_Pieza_Cm . '×' . $producto->Largo_Pieza_Cm)
+                        : null,
                     'Marca' => $producto->Marca,
                     'Modelo' => $producto->Modelo,
                     'Stock Mínimo' => $producto->Stock_Minimo,
@@ -108,6 +145,11 @@ class ProductoResource extends Resource
             TD::make('Nombre', 'NOMBRE'),
             TD::make('Descripcion', 'DESCRIPCION'),
             TD::make('Precio', 'PRECIO'),
+            TD::make('M2_Por_Caja', 'M²/CAJA'),
+            TD::make('Piezas_Por_Caja', 'PIEZAS/CAJA'),
+            TD::make('Unidad_Venta', 'UNIDAD VENTA'),
+            TD::make('Formato', 'FORMATO (CM)')
+                ->render(fn ($p) => ($p->Ancho_Pieza_Cm && $p->Largo_Pieza_Cm) ? ($p->Ancho_Pieza_Cm . '×' . $p->Largo_Pieza_Cm) : ''),
             TD::make('Marca', 'MARCA'),
             TD::make('Modelo', 'MODELO'),
             TD::make('Stock_Minimo', 'STOCK MINIMO'),
@@ -124,6 +166,11 @@ class ProductoResource extends Resource
             Sight::make('Nombre', 'NOMBRE'),
             Sight::make('Descripcion', 'DESCRIPCION'),
             Sight::make('Precio', 'PRECIO'),
+            Sight::make('M2_Por_Caja', 'M²/CAJA'),
+            Sight::make('Piezas_Por_Caja', 'PIEZAS/CAJA'),
+            Sight::make('Unidad_Venta', 'UNIDAD VENTA'),
+            Sight::make('Ancho_Pieza_Cm', 'ANCHO PIEZA (CM)'),
+            Sight::make('Largo_Pieza_Cm', 'LARGO PIEZA (CM)'),
             Sight::make('Marca', 'MARCA'),
             Sight::make('Modelo', 'MODELO'),
             Sight::make('Stock_Minimo', 'STOCK MINIMO'),

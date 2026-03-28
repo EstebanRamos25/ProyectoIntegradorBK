@@ -2,8 +2,9 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "prebuild": "rm -f public/hot",
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite --host 127.0.0.1"
     },
     "devDependencies": {
         "@react-three/drei": "^10.7.6",

@@ -111,7 +111,7 @@ class DbInsightsService
             return "Estás en el módulo de PRODUCTOS. Resumen rápido:\n" .
                 "- Productos registrados: {$total}\n" .
                 "- Categorías: {$categories}\n" .
-                "- Inventario: {$units} unidades (en {$invRows} registros)\n\n" .
+                "- Inventario: {$units} existencias (en {$invRows} registros)\n\n" .
                 "Puedes pedirme: \"resumen de productos\", \"top 5 productos con más inventario\" o \"¿cuántas baldosas/cerámicos tenemos?\".";
         }
 
@@ -122,7 +122,7 @@ class DbInsightsService
 
             return "Estás en el módulo de INVENTARIOS. Resumen rápido:\n" .
                 "- Registros de inventario: {$rows}\n" .
-                "- Unidades totales: {$units}\n" .
+                "- Existencias totales (suma Cantidad): {$units}\n" .
                 "- Productos con inventario: {$productsWithInv}\n\n" .
                 "Puedes pedirme: \"producto con más stock\" o \"top 5 productos por inventario\".";
         }
@@ -396,7 +396,7 @@ class DbInsightsService
             $total = Producto::query()->count();
             $invRows = Inventario::query()->count();
             $units = (int) Inventario::query()->sum('Cantidad');
-            return "En productos hay {$total} registros. En inventario hay {$units} unidades (en {$invRows} registros).";
+            return "En productos hay {$total} registros. En inventario hay {$units} existencias (en {$invRows} registros).";
         }
 
         // 1) Total de productos
@@ -429,7 +429,7 @@ class DbInsightsService
 
             $name = $row->producto->Nombre;
             $total = (int) $row->total;
-            return "El producto con mayor cantidad en inventario es '{$name}' con {$total} unidades (suma de inventarios).";
+            return "El producto con mayor cantidad en inventario es '{$name}' con {$total} existencias (suma de inventarios).";
         }
 
         // 3) Top 5 por inventario
@@ -500,7 +500,7 @@ class DbInsightsService
             return "No encontré productos que parezcan baldosas/azulejos cerámicos por nombre o descripción. Si me dices el nombre exacto (o una palabra clave del producto), lo busco mejor.";
         }
 
-        return "Baldosas/cerámicos detectados (por nombre/descr.): {$productsCount} productos. Unidades totales en inventario para esos productos: {$units}.";
+        return "Baldosas/cerámicos detectados (por nombre/descr.): {$productsCount} productos. Existencias totales en inventario para esos productos: {$units}.";
     }
 
     private function answerInventarios(string $text): ?string
@@ -511,7 +511,7 @@ class DbInsightsService
             $productsWithInv = Inventario::query()->whereNotNull('producto_id')->distinct('producto_id')->count('producto_id');
             return "Resumen de inventarios:\n" .
                 "- Registros: {$rows}\n" .
-                "- Unidades totales (suma Cantidad): {$sum}\n" .
+                "- Existencias totales (suma Cantidad): {$sum}\n" .
                 "- Productos con inventario: {$productsWithInv}";
         }
 
@@ -524,7 +524,7 @@ class DbInsightsService
         // Total de unidades (suma Cantidad)
         if ($this->wantsCount($text) && Str::contains($text, ['unidades', 'cantidad', 'stock'])) {
             $sum = (int) Inventario::query()->sum('Cantidad');
-            return "La suma total de unidades en inventario es {$sum}.";
+            return "La suma total de existencias (Cantidad) en inventario es {$sum}.";
         }
 
         return null;

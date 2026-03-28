@@ -261,6 +261,20 @@
         </div>
     </div>
 
+    @if(!empty($quotation['snapshot_top_png_data_url']))
+        <div class="section-title">Captura superior (escena 3D)</div>
+        <div class="card" style="text-align: center;">
+            <img
+                src="{{ $quotation['snapshot_top_png_data_url'] }}"
+                alt="Captura superior escena 3D"
+                style="width: 100%; max-width: 520px; border-radius: 14px; border: 1px solid #e2e8f0;"
+            />
+            <div class="note">
+                Imagen generada automáticamente desde el canvas 3D. Puede variar según la carga de texturas.
+            </div>
+        </div>
+    @endif
+
     <div class="footer">
         Documento generado automáticamente desde el módulo de experiencia 3D.
     </div>

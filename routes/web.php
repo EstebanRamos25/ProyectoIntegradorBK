@@ -5,6 +5,38 @@ use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ThreeQuotationController;
 use App\Http\Controllers\ThreeMaterialsController;
+use App\Http\Controllers\ThreeSceneController;
+use App\Models\ThreeScene;
+use Illuminate\Support\Facades\Auth;
+
+$disableViteHotIfNotReachable = function (): void {
+      $hotFile = public_path('hot');
+      if (!is_file($hotFile)) {
+           return;
+      }
+
+      $url = trim((string) file_get_contents($hotFile));
+      if ($url === '') {
+           @unlink($hotFile);
+           return;
+      }
+
+      $parts = parse_url($url);
+      $host = $parts['host'] ?? null;
+      $port = (int) ($parts['port'] ?? 5173);
+      if (!$host || $port <= 0) {
+           @unlink($hotFile);
+           return;
+      }
+
+      $fp = @fsockopen($host, $port, $errno, $errstr, 0.2);
+      if (is_resource($fp)) {
+           fclose($fp);
+           return;
+      }
+
+      @unlink($hotFile);
+};
 
 // Root redirect to Orchid admin prefix (e.g., /admin)
 Route::get('/', function () {
@@ -16,13 +48,33 @@ Route::get('/login', function () {
      $prefix = trim(config('platform.prefix', '/admin'), '/');
      return redirect()->to('/' . $prefix . '/login');
 });
-// Demo 3D simple
-Route::get('/3d', function() {
-     return view('three.index');
+// Menú de escenarios 3D (por usuario)
+Route::get('/3d', function() use ($disableViteHotIfNotReachable) {
+     $disableViteHotIfNotReachable();
+     $user = Auth::user();
+     $scenes = collect();
+     if ($user) {
+         $scenes = ThreeScene::query()
+             ->where('user_id', $user->id)
+             ->orderByDesc('updated_at')
+             ->get(['id', 'name', 'updated_at']);
+     }
+
+     return view('three.menu', [
+         'scenes' => $scenes,
+         'user' => $user,
+     ]);
 })->name('three.demo');
 
+// Editor 3D
+Route::get('/3d/editor', function() use ($disableViteHotIfNotReachable) {
+     $disableViteHotIfNotReachable();
+     return view('three.index');
+})->name('three.editor');
+
 // Demo 3D Room avanzada
-Route::get('/3d/room', function() {
+Route::get('/3d/room', function() use ($disableViteHotIfNotReachable) {
+     $disableViteHotIfNotReachable();
      return view('three.room');
 })->name('three.room');
 
@@ -38,6 +90,17 @@ Route::post('/api/chatbot', [ChatbotController::class, 'handle'])
      ->name('api.chatbot');
 
 Route::group(['middleware' => ['web', 'auth']], function () {
+    Route::get('/3d/scenes', [ThreeSceneController::class, 'index'])
+         ->name('three.scenes.index');
+    Route::post('/3d/scenes', [ThreeSceneController::class, 'store'])
+         ->name('three.scenes.store');
+    Route::get('/3d/scenes/{sceneId}', [ThreeSceneController::class, 'show'])
+         ->whereNumber('sceneId')
+         ->name('three.scenes.show');
+    Route::put('/3d/scenes/{sceneId}', [ThreeSceneController::class, 'update'])
+         ->whereNumber('sceneId')
+         ->name('three.scenes.update');
+
     Route::get('testing/smoke', [TestingController::class, 'smoke'])
          ->name('testing.smoke');
 
