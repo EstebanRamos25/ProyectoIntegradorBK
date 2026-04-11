@@ -110,7 +110,26 @@ function Controls({
   )
 
   return (
-    <div style={{position:'fixed', top:12, left:12, zIndex:10, width:260, background:'rgba(0,0,0,.65)', color:'#fff', padding:'12px', borderRadius:10, fontFamily:'system-ui,Arial,sans-serif'}}>
+    <div
+      onWheelCapture={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        top: 12,
+        left: 12,
+        zIndex: 10,
+        width: 260,
+        maxHeight: 'calc(100vh - 24px)',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        overscrollBehavior: 'contain',
+        WebkitOverflowScrolling: 'touch',
+        background: 'rgba(0,0,0,.65)',
+        color: '#fff',
+        padding: '12px',
+        borderRadius: 10,
+        fontFamily: 'system-ui,Arial,sans-serif',
+      }}
+    >
       <div style={{fontWeight:700, marginBottom:10}}>Catálogo</div>
 
       <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Escenarios (por usuario)</div>
