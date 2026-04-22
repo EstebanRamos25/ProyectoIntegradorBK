@@ -6,6 +6,7 @@ use App\Models\Venta;
 use App\Models\User;
 use App\Models\Promocion;
 use App\Models\Inventario;
+use App\Models\Producto;
 use Orchid\Crud\Resource;
 use Orchid\Screen\Fields\Input;
 use Orchid\Screen\Fields\DateTimer;
@@ -56,7 +57,12 @@ class VentaResource extends Resource
             Select::make('inventario_id')
                 ->title('Inventario')
                 ->fromModel(Inventario::class, 'id') // Puedes cambiar 'id' por otro campo más descriptivo si es necesario
-                ->empty('Selecciona un inventario')
+                ->empty('Selecciona un inventario'),
+
+            Select::make('producto_id')
+                ->title('Producto')
+                ->fromModel(Producto::class, 'Nombre')
+                ->empty('Selecciona un producto'),
         ];
     }
 
@@ -71,9 +77,17 @@ class VentaResource extends Resource
             TD::make('id'),
             TD::make('Total', 'TOTAL'),
             TD::make('Fecha', 'FECHA'),
-            TD::make('usuario.name', 'USUARIO'), // Muestra el nombre del usuario relacionado
-            TD::make('promocion.Nombre', 'PROMOCIÓN'), // Muestra el nombre de la promoción relacionada
-            TD::make('inventario.id', 'INVENTARIO'), // Muestra el ID del inventario relacionado
+            TD::make('Origen', 'ORIGEN'),
+            TD::make('Area_M2', 'M²'),
+            TD::make('Subtotal', 'SUBTOTAL'),
+            TD::make('Descuento_Pct', 'DESC %'),
+            TD::make('Costo_Total', 'COSTO'),
+            TD::make('Ganancia', 'GANANCIA'),
+
+            TD::make('usuario.name', 'USUARIO'),
+            TD::make('promocion.Nombre', 'PROMOCIÓN'),
+            TD::make('inventario.id', 'INVENTARIO'),
+            TD::make('producto.Nombre', 'PRODUCTO'),
 
             TD::make('created_at', 'Date of creation')
                 ->render(function ($model) {
@@ -98,9 +112,19 @@ class VentaResource extends Resource
             Sight::make('id', 'ID'),
             Sight::make('Total', 'TOTAL'),
             Sight::make('Fecha', 'FECHA'),
+            Sight::make('Origen', 'ORIGEN'),
+            Sight::make('Area_M2', 'M²'),
+            Sight::make('Precio_M2', 'PRECIO/M²'),
+            Sight::make('Subtotal', 'SUBTOTAL'),
+            Sight::make('Descuento_Pct', 'DESC %'),
+            Sight::make('Descuento_Monto', 'DESC MONTO'),
+            Sight::make('Costo_M2', 'COSTO/M²'),
+            Sight::make('Costo_Total', 'COSTO TOTAL'),
+            Sight::make('Ganancia', 'GANANCIA'),
             Sight::make('usuario.name', 'USUARIO'),
             Sight::make('promocion.Nombre', 'PROMOCIÓN'),
             Sight::make('inventario.id', 'INVENTARIO'),
+            Sight::make('producto.Nombre', 'PRODUCTO'),
             Sight::make('created_at', 'Date of creation'),
             Sight::make('updated_at', 'Update date'),
         ];

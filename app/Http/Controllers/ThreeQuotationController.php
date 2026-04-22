@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Inventario;
+use App\Models\Promocion;
 use App\Models\Producto;
+use App\Models\Venta;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -61,6 +63,20 @@ class ThreeQuotationController extends Controller
         $estimatedUnitPrice = round($pieceAreaM2 * $unitPriceM2, 0);
         $estimatedTotal = round($floorAreaM2 * $unitPriceM2, 0);
 
+        // Promoción automática por umbral de m² (si existe)
+        $appliedPromotion = Promocion::query()
+            ->where('Activo', true)
+            ->whereNotNull('Min_M2')
+            ->where('Min_M2', '<=', $floorAreaM2)
+            ->orderByDesc('Min_M2')
+            ->orderByDesc('Descuento')
+            ->first();
+
+        $discountPct = $appliedPromotion ? (float) ($appliedPromotion->Descuento ?? 0) : 0.0;
+        $discountPct = max(0.0, min(100.0, $discountPct));
+        $discountAmount = $discountPct > 0 ? round($estimatedTotal * ($discountPct / 100), 0) : 0.0;
+        $totalAfterDiscount = max(0.0, $estimatedTotal - $discountAmount);
+
         // Inventario / lote (por cajas)
         $m2PerBox = $producto ? (float) ($producto->M2_Por_Caja ?? 0) : 0.0;
         $boxesRequired = null;
@@ -69,6 +85,7 @@ class ThreeQuotationController extends Controller
         }
 
         $inventoryCheck = null;
+        $pickedInventarioId = null;
         if ($producto && $boxesRequired !== null) {
             $lotsAgg = Inventario::query()
                 ->where('producto_id', $producto->id)
@@ -88,6 +105,17 @@ class ThreeQuotationController extends Controller
             $bestLot = $lotsAgg->sortByDesc('boxes_available')->first();
             $bestLotBoxes = $bestLot ? (int) $bestLot['boxes_available'] : 0;
 
+            $bestLotCode = $bestLot['lot_code'] ?? null;
+            if ($bestLotCode !== null) {
+                $pickedInventarioId = Inventario::query()
+                    ->where('producto_id', $producto->id)
+                    ->where('Codigo_Lote', $bestLotCode)
+                    ->orderByDesc('Cajas_Disponibles')
+                    ->orderByDesc('Cantidad')
+                    ->orderBy('id')
+                    ->value('id');
+            }
+
             $inventoryCheck = [
                 'product_id' => (int) $producto->id,
                 'boxes_required' => $boxesRequired,
@@ -95,7 +123,7 @@ class ThreeQuotationController extends Controller
                 'missing_boxes' => max(0, $boxesRequired - $boxesAvailableTotal),
                 'can_fulfill_total' => $boxesAvailableTotal >= $boxesRequired,
                 'can_fulfill_single_lot' => $bestLotBoxes >= $boxesRequired,
-                'best_lot_code' => $bestLot['lot_code'] ?? null,
+                'best_lot_code' => $bestLotCode,
                 'best_lot_boxes_available' => $bestLotBoxes,
                 'lots' => $lotsAgg,
             ];
@@ -131,12 +159,47 @@ class ThreeQuotationController extends Controller
                 'unit_price_m2' => $unitPriceM2,
                 'estimated_unit_price' => $estimatedUnitPrice,
                 'estimated_total' => $estimatedTotal,
+                'subtotal' => $estimatedTotal,
+                'discount_pct' => $discountPct > 0 ? $discountPct : null,
+                'discount_amount' => $discountPct > 0 ? $discountAmount : null,
+                'total_after_discount' => $discountPct > 0 ? $totalAfterDiscount : $estimatedTotal,
                 'boxes_required' => $boxesRequired,
                 'm2_per_box' => $m2PerBox > 0 ? $m2PerBox : null,
             ],
+            'promotion' => $appliedPromotion && $discountPct > 0 ? [
+                'id' => (int) $appliedPromotion->id,
+                'name' => (string) ($appliedPromotion->Nombre ?? ''),
+                'min_m2' => $appliedPromotion->Min_M2 !== null ? (float) $appliedPromotion->Min_M2 : null,
+                'discount_pct' => $discountPct,
+            ] : null,
             'inventory_check' => $inventoryCheck,
             'plan_svg' => $this->buildPlanSvg($room, $piece),
         ];
+
+        // Registrar venta/cotización (no afecta stock): útil para reportes de ganancia (admin)
+        $costoM2 = $producto ? ($producto->Costo_M2 !== null ? (float) $producto->Costo_M2 : null) : null;
+        $costoTotal = $costoM2 !== null ? round($floorAreaM2 * $costoM2, 0) : null;
+        $ganancia = $costoTotal !== null ? round(((float) $quotation['summary']['total_after_discount']) - $costoTotal, 0) : null;
+
+        if ($request->user()) {
+            Venta::query()->create([
+                'Total' => (float) $quotation['summary']['total_after_discount'],
+                'Fecha' => now()->toDateString(),
+                'Origen' => '3d_quotation',
+                'usuario_id' => (int) $request->user()->id,
+                'promocion_id' => $appliedPromotion?->id,
+                'inventario_id' => $pickedInventarioId,
+                'producto_id' => $producto?->id,
+                'Area_M2' => $floorAreaM2,
+                'Precio_M2' => $unitPriceM2,
+                'Subtotal' => $estimatedTotal,
+                'Descuento_Pct' => $discountPct > 0 ? $discountPct : null,
+                'Descuento_Monto' => $discountPct > 0 ? $discountAmount : null,
+                'Costo_M2' => $costoM2,
+                'Costo_Total' => $costoTotal,
+                'Ganancia' => $ganancia,
+            ]);
+        }
 
         $pdf = Pdf::loadView('three.quotation', [
             'quotation' => $quotation,

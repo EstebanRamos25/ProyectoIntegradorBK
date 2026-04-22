@@ -12,7 +12,36 @@ class Venta extends Model
 {
     use HasFactory, AsSource, Filterable, Attachable;
 
-    protected $fillable = ["Total", "Fecha", "usuario_id", "promocion_id", "inventario_id"];
+    protected $fillable = [
+        "Total",
+        "Fecha",
+        "Origen",
+        "usuario_id",
+        "promocion_id",
+        "inventario_id",
+        "producto_id",
+        "Area_M2",
+        "Precio_M2",
+        "Subtotal",
+        "Descuento_Pct",
+        "Descuento_Monto",
+        "Costo_M2",
+        "Costo_Total",
+        "Ganancia",
+    ];
+
+    protected $casts = [
+        'Total' => 'float',
+        'Area_M2' => 'float',
+        'Precio_M2' => 'float',
+        'Subtotal' => 'float',
+        'Descuento_Pct' => 'float',
+        'Descuento_Monto' => 'float',
+        'Costo_M2' => 'float',
+        'Costo_Total' => 'float',
+        'Ganancia' => 'float',
+        'Fecha' => 'date',
+    ];
 
     public function usuario()
     {
@@ -22,6 +51,11 @@ class Venta extends Model
     public function promocion()
     {
         return $this->belongsTo(Promocion::class);
+    }
+
+    public function producto()
+    {
+        return $this->belongsTo(Producto::class);
     }
 
     public function inventario()

@@ -18,6 +18,7 @@ class Producto extends Model
         "Nombre",
         "Descripcion",
         "Precio",
+        "Costo_M2",
         "M2_Por_Caja",
         "Piezas_Por_Caja",
         "Unidad_Venta",
@@ -31,6 +32,7 @@ class Producto extends Model
 
     protected $casts = [
         'Precio' => 'float',
+        'Costo_M2' => 'float',
         'M2_Por_Caja' => 'float',
         'Piezas_Por_Caja' => 'int',
         'Ancho_Pieza_Cm' => 'float',

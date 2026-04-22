@@ -11,5 +11,17 @@ use Orchid\Screen\AsSource;
 class Promocion extends Model
 {
     use HasFactory, AsSource, Filterable, Attachable;
-    protected $fillable = ["Nombre","Descripcion","Descuento"];
+    protected $fillable = [
+        "Nombre",
+        "Descripcion",
+        "Descuento",
+        "Min_M2",
+        "Activo",
+    ];
+
+    protected $casts = [
+        'Descuento' => 'float',
+        'Min_M2' => 'float',
+        'Activo' => 'bool',
+    ];
 }

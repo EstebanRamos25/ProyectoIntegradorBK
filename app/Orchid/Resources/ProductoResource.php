@@ -32,6 +32,12 @@ class ProductoResource extends Resource
                 ->title('Precio por m²')
                 ->step(0.01)
                 ->placeholder('Ej: 180.00'),
+            Input::make('Costo_M2')
+                ->type('number')
+                ->title('Costo por m²')
+                ->step(0.01)
+                ->placeholder('Ej: 120.00')
+                ->help('Costo estimado de compra por m² para calcular ganancia en reportes.'),
             Input::make('M2_Por_Caja')
                 ->type('number')
                 ->step(0.0001)
@@ -109,6 +115,7 @@ class ProductoResource extends Resource
                     'Nombre' => $producto->Nombre,
                     'Descripción' => $producto->Descripcion,
                     'Precio' => '$ ' . number_format((float)$producto->Precio, 2, '.', ','),
+                    'Costo/m²' => $producto->Costo_M2 !== null ? ('$ ' . number_format((float)$producto->Costo_M2, 2, '.', ',')) : null,
                     'm² por caja' => $producto->M2_Por_Caja,
                     'Piezas por caja' => $producto->Piezas_Por_Caja,
                     'Unidad de venta' => $producto->Unidad_Venta,
@@ -166,6 +173,7 @@ class ProductoResource extends Resource
             Sight::make('Nombre', 'NOMBRE'),
             Sight::make('Descripcion', 'DESCRIPCION'),
             Sight::make('Precio', 'PRECIO'),
+            Sight::make('Costo_M2', 'COSTO/M²'),
             Sight::make('M2_Por_Caja', 'M²/CAJA'),
             Sight::make('Piezas_Por_Caja', 'PIEZAS/CAJA'),
             Sight::make('Unidad_Venta', 'UNIDAD VENTA'),

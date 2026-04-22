@@ -88,6 +88,12 @@ class PlatformProvider extends OrchidServiceProvider
                 ->permission('platform.audit')
                 ->title('Monitoreo'),
 
+            Menu::make('Reporte de ganancias')
+                ->icon('bs.cash-stack')
+                ->route('platform.ventas.report')
+                ->permission('platform.ventas.report')
+                ->title('Monitoreo'),
+
             Menu::make('Backups')
                 ->icon('bs.hdd')
                 ->route('platform.backup')
@@ -131,6 +137,8 @@ class PlatformProvider extends OrchidServiceProvider
                 ->addPermission('platform.systems.users', __('Users')),
             ItemPermission::group('Auditoría')
                 ->addPermission('platform.audit', 'Ver registros de auditoría'),
+            ItemPermission::group('Ventas')
+                ->addPermission('platform.ventas.report', 'Ver reporte de ganancias (3D)'),
             ItemPermission::group('Backups')
                 ->addPermission('platform.backup', 'Gestionar backups'),
         ];

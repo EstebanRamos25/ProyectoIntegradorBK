@@ -238,10 +238,32 @@
                             <td>Cantidad estimada</td>
                             <td class="money">{{ number_format($quotation['summary']['estimated_units'], 0, ',', '.') }} piezas</td>
                         </tr>
-                        <tr class="total-row">
-                            <td>Total estimado material</td>
-                            <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['estimated_total'], 0, ',', '.') }}</td>
+                        <tr>
+                            <td>Subtotal estimado material</td>
+                            <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['subtotal'] ?? $quotation['summary']['estimated_total'], 0, ',', '.') }}</td>
                         </tr>
+                        @if(!empty($quotation['promotion']))
+                            <tr>
+                                <td>Promoción aplicada</td>
+                                <td class="money">
+                                    {{ $quotation['promotion']['name'] }}
+                                    ({{ number_format((float) $quotation['promotion']['discount_pct'], 2, ',', '.') }}%)
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Descuento</td>
+                                <td class="money">- {{ $quotation['currency_symbol'] }} {{ number_format((float) ($quotation['summary']['discount_amount'] ?? 0), 0, ',', '.') }}</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>Total con descuento</td>
+                                <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format((float) ($quotation['summary']['total_after_discount'] ?? $quotation['summary']['estimated_total']), 0, ',', '.') }}</td>
+                            </tr>
+                        @else
+                            <tr class="total-row">
+                                <td>Total estimado material</td>
+                                <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['estimated_total'], 0, ',', '.') }}</td>
+                            </tr>
+                        @endif
                     </tbody>
                 </table>
                 <div class="note">

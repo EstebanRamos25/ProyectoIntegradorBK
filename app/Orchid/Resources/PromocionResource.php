@@ -5,6 +5,7 @@ namespace App\Orchid\Resources;
 use App\Models\Promocion;
 use Orchid\Crud\Resource;
 use Orchid\Screen\Fields\Input;
+use Orchid\Screen\Fields\Switcher;
 use Orchid\Screen\Sight;
 use Orchid\Screen\TD;
 
@@ -37,7 +38,20 @@ class PromocionResource extends Resource
                 ->type('number')
                 ->step(0.01)
                 ->title('Descuento')
-                ->placeholder('Ingresa el porcentaje de descuento')
+                ->placeholder('Ingresa el porcentaje de descuento'),
+
+            Input::make('Min_M2')
+                ->type('number')
+                ->step(0.01)
+                ->title('Mínimo m² (para activar)')
+                ->placeholder('Ej: 20.00')
+                ->help('Si se llena, esta promoción se aplicará automáticamente en cotizaciones 3D cuando el área del piso sea igual o mayor.'),
+
+            Switcher::make('Activo')
+                ->sendTrueOrFalse()
+                ->title('Activa')
+                ->placeholder('Activa')
+                ->help('Solo promociones activas pueden aplicarse automáticamente.'),
         ];
     }
 
@@ -53,6 +67,8 @@ class PromocionResource extends Resource
             TD::make('Nombre', 'NOMBRE'),
             TD::make('Descripcion', 'DESCRIPCION'),
             TD::make('Descuento', 'DESCUENTO'),
+            TD::make('Min_M2', 'MIN M²'),
+            TD::make('Activo', 'ACTIVA'),
 
             TD::make('created_at', 'Date of creation')
                 ->render(function ($model) {
@@ -78,6 +94,8 @@ class PromocionResource extends Resource
             Sight::make('Nombre', 'NOMBRE'),
             Sight::make('Descripcion', 'DESCRIPCION'),
             Sight::make('Descuento', 'DESCUENTO'),
+            Sight::make('Min_M2', 'MIN M²'),
+            Sight::make('Activo', 'ACTIVA'),
             Sight::make('created_at', 'Date of creation'),
             Sight::make('updated_at', 'Update date'),
         ];

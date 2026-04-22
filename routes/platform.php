@@ -19,6 +19,7 @@ use App\Orchid\Screens\User\UserListScreen;
 use App\Orchid\Screens\User\UserProfileScreen;
 use App\Orchid\Screens\Audit\ActivityListScreen;
 use App\Orchid\Screens\Backup\BackupScreen;
+use App\Orchid\Screens\Ventas\VentasProfitReportScreen;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
 use App\Orchid\Screens\TqaScreen;
@@ -115,12 +116,22 @@ Route::screen('/examples/cards', ExampleCardsScreen::class)->name('platform.exam
 // Auditoría: exportación PDF (definir ANTES para evitar colisión con Screen)
 Route::get('audit/export', [ActivityListScreen::class, 'export'])->name('platform.audit.export');
 
+// Ventas: exportación PDF (definir ANTES para evitar colisión con Screen)
+Route::get('ventas/report/export', [VentasProfitReportScreen::class, 'export'])->name('platform.ventas.report.export');
+
 // Auditoría
 Route::screen('audit', ActivityListScreen::class)
     ->name('platform.audit')
     ->breadcrumbs(fn (Trail $trail) => $trail
         ->parent('platform.index')
         ->push('Auditoría', route('platform.audit')));
+
+// Ventas: reporte de ganancias
+Route::screen('ventas/report', VentasProfitReportScreen::class)
+    ->name('platform.ventas.report')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Reporte de ganancias', route('platform.ventas.report')));
 
 // Descarga de backups (GET) - definir ANTES para evitar colisión con Screen route
 Route::get('backup/download', [BackupScreen::class, 'download'])->name('platform.backup.download');
