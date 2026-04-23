@@ -6,6 +6,7 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ThreeQuotationController;
 use App\Http\Controllers\ThreeMaterialsController;
 use App\Http\Controllers\ThreeSceneController;
+use App\Http\Controllers\Auth\ClientAuthController;
 use App\Models\ThreeScene;
 use Illuminate\Support\Facades\Auth;
 
@@ -43,46 +44,49 @@ Route::get('/', function () {
      return view('home');
 });
 
-// Convenience: redirect /login to Orchid's auth page under the admin prefix
-Route::get('/login', function () {
-     $prefix = trim(config('platform.prefix', '/admin'), '/');
-     return redirect()->to('/' . $prefix . '/login');
+// Cliente: login/registro (se usa el nombre de ruta "login" para que el middleware auth redirija correctamente)
+Route::get('/login', [ClientAuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [ClientAuthController::class, 'login'])->name('client.login');
+Route::get('/register', [ClientAuthController::class, 'showRegister'])->name('register');
+Route::post('/register', [ClientAuthController::class, 'register'])->name('client.register');
+Route::post('/logout', [ClientAuthController::class, 'logout'])->name('logout');
+Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHotIfNotReachable) {
+     // Menú de escenarios 3D (por usuario)
+     Route::get('/3d', function() use ($disableViteHotIfNotReachable) {
+          $disableViteHotIfNotReachable();
+          $user = Auth::user();
+          $scenes = collect();
+          if ($user) {
+               $scenes = ThreeScene::query()
+                    ->where('user_id', $user->id)
+                    ->orderByDesc('updated_at')
+                    ->get(['id', 'name', 'updated_at']);
+          }
+
+          return view('three.menu', [
+               'scenes' => $scenes,
+               'user' => $user,
+          ]);
+     })->name('three.demo');
+
+     // Editor 3D
+     Route::get('/3d/editor', function() use ($disableViteHotIfNotReachable) {
+          $disableViteHotIfNotReachable();
+          return view('three.index');
+     })->name('three.editor');
+
+     // Demo 3D Room avanzada
+     Route::get('/3d/room', function() use ($disableViteHotIfNotReachable) {
+          $disableViteHotIfNotReachable();
+          return view('three.room');
+     })->name('three.room');
+
+     Route::post('/3d/quotation', [ThreeQuotationController::class, 'generate'])
+          ->name('three.quotation');
+
+     Route::get('/3d/materials', [ThreeMaterialsController::class, 'index'])
+          ->name('three.materials');
 });
-// Menú de escenarios 3D (por usuario)
-Route::get('/3d', function() use ($disableViteHotIfNotReachable) {
-     $disableViteHotIfNotReachable();
-     $user = Auth::user();
-     $scenes = collect();
-     if ($user) {
-         $scenes = ThreeScene::query()
-             ->where('user_id', $user->id)
-             ->orderByDesc('updated_at')
-             ->get(['id', 'name', 'updated_at']);
-     }
-
-     return view('three.menu', [
-         'scenes' => $scenes,
-         'user' => $user,
-     ]);
-})->name('three.demo');
-
-// Editor 3D
-Route::get('/3d/editor', function() use ($disableViteHotIfNotReachable) {
-     $disableViteHotIfNotReachable();
-     return view('three.index');
-})->name('three.editor');
-
-// Demo 3D Room avanzada
-Route::get('/3d/room', function() use ($disableViteHotIfNotReachable) {
-     $disableViteHotIfNotReachable();
-     return view('three.room');
-})->name('three.room');
-
-Route::post('/3d/quotation', [ThreeQuotationController::class, 'generate'])
-     ->name('three.quotation');
-
-Route::get('/3d/materials', [ThreeMaterialsController::class, 'index'])
-     ->name('three.materials');
 
 // API Chatbot (OpenAI) - excluir CSRF explícitamente
 Route::post('/api/chatbot', [ChatbotController::class, 'handle'])

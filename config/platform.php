@@ -46,7 +46,7 @@ return [
 
     'middleware' => [
         'public'  => ['web', 'cache.headers:private;must_revalidate;etag'],
-        'private' => ['web', 'platform', 'cache.headers:private;must_revalidate;etag'],
+        'private' => ['web', 'platform', \App\Http\Middleware\EnsureNotClient::class, 'cache.headers:private;must_revalidate;etag'],
     ],
 
     /*
