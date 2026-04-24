@@ -16,6 +16,17 @@
             </div>
             <div class="flex items-center gap-3">
                 @if($user)
+                    @if(method_exists($user, 'inRole') && $user->inRole('client'))
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button
+                                type="submit"
+                                class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                            >
+                                Cerrar sesión
+                            </button>
+                        </form>
+                    @endif
                     <a
                         href="{{ route('three.editor', ['new' => 1]) }}"
                         target="_blank"

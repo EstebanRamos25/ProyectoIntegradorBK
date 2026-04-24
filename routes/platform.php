@@ -19,6 +19,8 @@ use App\Orchid\Screens\User\UserListScreen;
 use App\Orchid\Screens\User\UserProfileScreen;
 use App\Orchid\Screens\Audit\ActivityListScreen;
 use App\Orchid\Screens\Backup\BackupScreen;
+use App\Orchid\Screens\Three\ThreeDemoScreen;
+use App\Orchid\Screens\Three\ThreeRoomScreen;
 use App\Orchid\Screens\Ventas\VentasProfitReportScreen;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
@@ -142,3 +144,16 @@ Route::screen('backup', BackupScreen::class)
     ->breadcrumbs(fn (Trail $trail) => $trail
         ->parent('platform.index')
         ->push('Backups', route('platform.backup')));
+
+// Experiencias 3D (dentro del panel admin)
+Route::screen('three/demo', ThreeDemoScreen::class)
+    ->name('platform.three.demo')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Experiencia 3D', route('platform.three.demo')));
+
+Route::screen('three/room', ThreeRoomScreen::class)
+    ->name('platform.three.room')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Experiencia 3D (Room)', route('platform.three.room')));

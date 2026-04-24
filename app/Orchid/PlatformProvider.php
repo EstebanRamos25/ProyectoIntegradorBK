@@ -102,13 +102,12 @@ class PlatformProvider extends OrchidServiceProvider
 
             Menu::make('Experiencia 3D (Demo)')
                 ->icon('bs.box')
-                ->url(route('three.demo'))
+                ->route('platform.three.demo')
                 ->title('Experiencias'),
 
             Menu::make('Experiencia 1')
                 ->icon('bs.box')
-                ->url(route('three.room'))
-                ->target('_blank'),
+                ->route('platform.three.room'),
 
             /* Menu::make('Documentation')
                 ->title('Docs')
