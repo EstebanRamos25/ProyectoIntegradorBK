@@ -7,10 +7,13 @@ namespace App\Http\Controllers;
 use App\Models\Inventario;
 use App\Models\Promocion;
 use App\Models\Producto;
+use App\Models\ThreeQuote;
+use App\Models\ThreeScene;
 use App\Models\Venta;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 
 class ThreeQuotationController extends Controller
 {
@@ -18,8 +21,13 @@ class ThreeQuotationController extends Controller
     {
         $validated = $request->validate([
             'material_id' => ['nullable', 'integer', 'exists:productos,id'],
+            'scene_id' => ['nullable', 'integer', 'exists:three_scenes,id'],
             'scene_name' => ['nullable', 'string', 'max:120'],
             'floor_kind' => ['nullable', 'string', 'max:40'],
+            'walls.material_id' => ['nullable', 'integer', 'exists:productos,id'],
+            'walls.piece.kind' => ['nullable', 'string', 'in:tile,plank'],
+            'walls.piece.width_cm' => ['nullable', 'numeric', 'min:10', 'max:400'],
+            'walls.piece.depth_cm' => ['nullable', 'numeric', 'min:10', 'max:400'],
             'snapshot_top_png_data_url' => ['nullable', 'string', 'max:5000000'],
             'room.width_cm' => ['required', 'numeric', 'min:200', 'max:3000'],
             'room.depth_cm' => ['required', 'numeric', 'min:200', 'max:3000'],
@@ -51,6 +59,46 @@ class ThreeQuotationController extends Controller
         $floorAreaM2 = round(($room['width_cm'] / 100) * ($room['depth_cm'] / 100), 2);
         $pieceAreaM2 = round(($piece['width_cm'] / 100) * ($piece['depth_cm'] / 100), 4);
         $estimatedUnits = max(1, (int) ceil($floorAreaM2 / max($pieceAreaM2, 0.0001)));
+
+        // Paredes: cobertura (solo referencia, sin precio).
+        $wallsSection = null;
+        $wallsMaterialId = data_get($validated, 'walls.material_id');
+        if ($wallsMaterialId) {
+            $wallAreaM2 = round(2 * (($room['width_cm'] / 100) + ($room['depth_cm'] / 100)) * ($room['height_cm'] / 100), 2);
+
+            $wallPieceWidthCm = (float) data_get($validated, 'walls.piece.width_cm', 0);
+            $wallPieceDepthCm = (float) data_get($validated, 'walls.piece.depth_cm', 0);
+            $wallPieceAreaM2 = null;
+            $wallEstimatedUnits = null;
+
+            if ($wallPieceWidthCm > 0 && $wallPieceDepthCm > 0) {
+                $wallPieceAreaM2 = round(($wallPieceWidthCm / 100) * ($wallPieceDepthCm / 100), 4);
+                $wallEstimatedUnits = max(1, (int) ceil($wallAreaM2 / max($wallPieceAreaM2, 0.0001)));
+            }
+
+            $wallProducto = Producto::query()->with(['categoria'])->find($wallsMaterialId);
+
+            $wallsSection = [
+                'wall_area_m2' => $wallAreaM2,
+                'piece_area_m2' => $wallPieceAreaM2,
+                'estimated_units' => $wallEstimatedUnits,
+                'piece' => ($wallPieceWidthCm > 0 && $wallPieceDepthCm > 0) ? [
+                    'kind' => (string) (data_get($validated, 'walls.piece.kind') ?? ''),
+                    'width_cm' => $wallPieceWidthCm,
+                    'depth_cm' => $wallPieceDepthCm,
+                ] : null,
+                'material' => $wallProducto ? [
+                    'id' => (int) $wallProducto->id,
+                    'name' => (string) ($wallProducto->Nombre ?? ''),
+                    'brand' => (string) ($wallProducto->Marca ?? ''),
+                    'model' => (string) ($wallProducto->Modelo ?? ''),
+                    'category' => [
+                        'id' => (int) ($wallProducto->categoria_id ?? 0),
+                        'name' => (string) (optional($wallProducto->categoria)->Nombre ?? ''),
+                    ],
+                ] : null,
+            ];
+        }
 
         // Si el frontend manda un material real (Producto), usamos su precio y empaques.
         $materialId = $validated['material_id'] ?? null;
@@ -136,6 +184,7 @@ class ThreeQuotationController extends Controller
             'currency_symbol' => (string) config('three_quotation.currency_symbol', 'Bs'),
             'prices_are_reference' => (bool) config('three_quotation.prices_are_reference', true),
             'floor_kind' => $this->floorLabel((string) ($validated['floor_kind'] ?? 'custom')),
+            'walls' => $wallsSection,
             'snapshot_top_png_data_url' => $this->sanitizeSnapshotDataUrl($validated['snapshot_top_png_data_url'] ?? null),
             'material' => $producto ? [
                 'id' => (int) $producto->id,
@@ -176,6 +225,37 @@ class ThreeQuotationController extends Controller
             'plan_svg' => $this->buildPlanSvg($room, $piece),
         ];
 
+        // Persistir cotización por escena (para ver/enviar desde el menú).
+        $sceneId = $validated['scene_id'] ?? null;
+        $quote = null;
+        if ($sceneId && $request->user()) {
+            $scene = ThreeScene::query()
+                ->whereKey((int) $sceneId)
+                ->where('user_id', (int) $request->user()->id)
+                ->firstOrFail();
+
+            $quote = ThreeQuote::query()
+                ->where('three_scene_id', $scene->id)
+                ->where('user_id', (int) $request->user()->id)
+                ->where('status', 'draft')
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$quote) {
+                $quote = new ThreeQuote();
+                $quote->three_scene_id = (int) $scene->id;
+                $quote->user_id = (int) $request->user()->id;
+                $quote->status = 'draft';
+            }
+
+            $quote->quotation = $quotation;
+            $quote->producto_id = $producto?->id;
+            $quote->boxes_required = $boxesRequired;
+            $quote->area_m2 = $floorAreaM2;
+            $quote->total = (float) $quotation['summary']['total_after_discount'];
+            $quote->save();
+        }
+
         // Registrar venta/cotización (no afecta stock): útil para reportes de ganancia (admin)
         $costoM2 = $producto ? ($producto->Costo_M2 !== null ? (float) $producto->Costo_M2 : null) : null;
         $costoTotal = $costoM2 !== null ? round($floorAreaM2 * $costoM2, 0) : null;
@@ -186,6 +266,7 @@ class ThreeQuotationController extends Controller
                 'Total' => (float) $quotation['summary']['total_after_discount'],
                 'Fecha' => now()->toDateString(),
                 'Origen' => '3d_quotation',
+                'three_quote_id' => $quote?->id,
                 'usuario_id' => (int) $request->user()->id,
                 'promocion_id' => $appliedPromotion?->id,
                 'inventario_id' => $pickedInventarioId,
@@ -205,7 +286,19 @@ class ThreeQuotationController extends Controller
             'quotation' => $quotation,
         ])->setPaper('a4', 'portrait');
 
-        return $pdf->download('cotizacion-escena-3d-'.now()->format('Ymd_His').'.pdf');
+        $pdfOutput = $pdf->output();
+
+        if ($quote && $request->user()) {
+            $pdfPath = 'three-quotes/u'.$request->user()->id.'/scene'.$quote->three_scene_id.'/cotizacion-'.$quote->id.'.pdf';
+            Storage::disk('public')->put($pdfPath, $pdfOutput);
+            $quote->pdf_path = $pdfPath;
+            $quote->save();
+        }
+
+        return response($pdfOutput, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="cotizacion-escena-3d-'.now()->format('Ymd_His').'.pdf"',
+        ]);
     }
 
     protected function sanitizeSnapshotDataUrl(?string $dataUrl): ?string

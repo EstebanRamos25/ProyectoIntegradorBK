@@ -16,6 +16,7 @@ class Venta extends Model
         "Total",
         "Fecha",
         "Origen",
+        "three_quote_id",
         "usuario_id",
         "promocion_id",
         "inventario_id",
@@ -61,5 +62,10 @@ class Venta extends Model
     public function inventario()
     {
         return $this->belongsTo(Inventario::class);
+    }
+
+    public function inventariosDescontados()
+    {
+        return $this->hasMany(VentaInventario::class);
     }
 }

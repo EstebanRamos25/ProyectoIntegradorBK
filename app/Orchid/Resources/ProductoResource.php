@@ -2,12 +2,18 @@
 
 namespace App\Orchid\Resources;
 
+use App\Models\Inventario;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use Orchid\Crud\ResourceRequest;
 use App\Models\Producto;
 use App\Models\Categoria;
 use Orchid\Crud\Resource;
+use Orchid\Screen\Fields\DateTimer;
+use Orchid\Screen\Fields\Group;
 use Orchid\Screen\Fields\Input;
+use Orchid\Screen\Fields\Label;
 use Orchid\Screen\Fields\Upload;
 use Orchid\Screen\Fields\Select;
 use Orchid\Screen\Sight;
@@ -70,7 +76,65 @@ class ProductoResource extends Resource
             Input::make('Stock_Minimo')->type('number')->title('Stock Minimo')->placeholder('Ingresa el stock mínimo'),
             Select::make('categoria_id')->title('Categoria')->fromModel(Categoria::class, 'Nombre')->empty('Selecciona una categoria'),
             Upload::make('image')->title('Imagen')->groups('image')->acceptedFiles('image/*')->maxFiles(1),
+
+            Label::make('initial_inventory_help')
+                ->title('Stock inicial (opcional)')
+                ->value('Si completas estos campos al crear el producto, se registrará automáticamente un ingreso en Inventario (primer lote).'),
+
+            Group::make([
+                Input::make('initial_inventory.Codigo_Lote')
+                    ->title('Código de lote')
+                    ->placeholder('Ej: 2026-A'),
+
+                DateTimer::make('initial_inventory.Fecha_Ingreso')
+                    ->title('Fecha de ingreso')
+                    ->allowInput()
+                    ->placeholder('Selecciona'),
+            ])->autoWidth(),
+
+            Group::make([
+                Input::make('initial_inventory.Cajas_Entrada')
+                    ->type('number')
+                    ->title('Cajas de entrada')
+                    ->placeholder('Ej: 100'),
+
+                Input::make('initial_inventory.Cajas_Disponibles')
+                    ->type('number')
+                    ->title('Cajas disponibles')
+                    ->placeholder('Ej: 100')
+                    ->help('Si lo dejas vacío, el sistema lo inicializa igual a cajas de entrada.'),
+            ])->autoWidth(),
+
+            Group::make([
+                Input::make('initial_inventory.Ubicacion')
+                    ->title('Ubicación')
+                    ->placeholder('Ej: Almacén A - Pasillo 3'),
+
+                Input::make('initial_inventory.Estado')
+                    ->title('Estado')
+                    ->placeholder('Ej: Disponible'),
+            ])->autoWidth(),
         ];
+    }
+
+    public function paginationQuery(ResourceRequest $request, Model $model): Builder
+    {
+        $productoTable = $model->getTable();
+        $inventarioTable = (new Inventario())->getTable();
+
+        return $model->query()
+            ->select($productoTable . '.*')
+            ->selectSub(function ($q) use ($inventarioTable, $productoTable) {
+                $q->from($inventarioTable)
+                    ->selectRaw('SUM(COALESCE(Cajas_Disponibles, Cantidad, 0))')
+                    ->whereColumn($inventarioTable . '.producto_id', $productoTable . '.id');
+            }, 'stock_boxes_available');
+    }
+
+    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    {
+        // Para que el detalle (view/edit) también pueda acceder a stock_boxes_available.
+        return $this->paginationQuery($request, $model);
     }
 
     public function columns(): array
@@ -116,6 +180,7 @@ class ProductoResource extends Resource
                     'Descripción' => $producto->Descripcion,
                     'Precio' => '$ ' . number_format((float)$producto->Precio, 2, '.', ','),
                     'Costo/m²' => $producto->Costo_M2 !== null ? ('$ ' . number_format((float)$producto->Costo_M2, 2, '.', ',')) : null,
+                    'Stock (cajas disp.)' => $producto->stock_boxes_available !== null ? (int) $producto->stock_boxes_available : null,
                     'm² por caja' => $producto->M2_Por_Caja,
                     'Piezas por caja' => $producto->Piezas_Por_Caja,
                     'Unidad de venta' => $producto->Unidad_Venta,
@@ -152,6 +217,8 @@ class ProductoResource extends Resource
             TD::make('Nombre', 'NOMBRE'),
             TD::make('Descripcion', 'DESCRIPCION'),
             TD::make('Precio', 'PRECIO'),
+            TD::make('stock_boxes_available', 'STOCK (CAJAS)')
+                ->render(fn ($p) => $p->stock_boxes_available !== null ? (string) ((int) $p->stock_boxes_available) : '0'),
             TD::make('M2_Por_Caja', 'M²/CAJA'),
             TD::make('Piezas_Por_Caja', 'PIEZAS/CAJA'),
             TD::make('Unidad_Venta', 'UNIDAD VENTA'),
@@ -174,6 +241,7 @@ class ProductoResource extends Resource
             Sight::make('Descripcion', 'DESCRIPCION'),
             Sight::make('Precio', 'PRECIO'),
             Sight::make('Costo_M2', 'COSTO/M²'),
+            Sight::make('stock_boxes_available', 'STOCK (CAJAS DISP.)'),
             Sight::make('M2_Por_Caja', 'M²/CAJA'),
             Sight::make('Piezas_Por_Caja', 'PIEZAS/CAJA'),
             Sight::make('Unidad_Venta', 'UNIDAD VENTA'),
@@ -193,8 +261,41 @@ class ProductoResource extends Resource
 
     public function save(Request $request, Model $model): void
     {
-        $model->fill($request->except('image'));
+        $wasNew = !$model->exists;
+        $initial = $request->input('initial_inventory');
+
+        $model->fill($request->except(['image', 'initial_inventory', 'initial_inventory_help']));
         $model->save();
+
+        // Solo al crear: si llenan stock inicial, creamos 1 registro en Inventario.
+        if ($wasNew && is_array($initial)) {
+            $cajasEntrada = array_key_exists('Cajas_Entrada', $initial) ? (int) ($initial['Cajas_Entrada'] ?? 0) : null;
+            $cajasDisponibles = array_key_exists('Cajas_Disponibles', $initial) && $initial['Cajas_Disponibles'] !== ''
+                ? (int) ($initial['Cajas_Disponibles'] ?? 0)
+                : null;
+            $cantidadLegacy = array_key_exists('Cantidad', $initial) && $initial['Cantidad'] !== ''
+                ? (int) ($initial['Cantidad'] ?? 0)
+                : null;
+
+            $hasStockValue = (
+                ($cajasEntrada !== null && $cajasEntrada > 0)
+                || ($cajasDisponibles !== null && $cajasDisponibles > 0)
+                || ($cantidadLegacy !== null && $cantidadLegacy > 0)
+            );
+
+            if ($hasStockValue) {
+                Inventario::query()->create([
+                    'producto_id' => (int) $model->id,
+                    'Codigo_Lote' => isset($initial['Codigo_Lote']) ? (string) ($initial['Codigo_Lote'] ?? '') : null,
+                    'Fecha_Ingreso' => $initial['Fecha_Ingreso'] ?? null,
+                    'Ubicacion' => isset($initial['Ubicacion']) ? (string) ($initial['Ubicacion'] ?? '') : null,
+                    'Estado' => isset($initial['Estado']) ? (string) ($initial['Estado'] ?? '') : null,
+                    'Cajas_Entrada' => $cajasEntrada,
+                    'Cajas_Disponibles' => $cajasDisponibles,
+                    'Cantidad' => $cantidadLegacy,
+                ]);
+            }
+        }
 
         $imageIds = (array) $request->input('image', []);
         $imageIds = array_filter($imageIds, fn($v) => !empty($v));

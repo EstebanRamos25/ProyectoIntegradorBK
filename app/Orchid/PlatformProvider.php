@@ -94,6 +94,11 @@ class PlatformProvider extends OrchidServiceProvider
                 ->permission('platform.ventas.report')
                 ->title('Monitoreo'),
 
+            Menu::make('Cotizaciones 3D')
+                ->icon('bs.file-earmark-text')
+                ->route('platform.resource.list', 'three-quote-resources')
+                ->title('Ventas'),
+
             Menu::make('Backups')
                 ->icon('bs.hdd')
                 ->route('platform.backup')

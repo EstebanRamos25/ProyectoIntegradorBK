@@ -5,9 +5,12 @@ use App\Http\Controllers\TestingController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ThreeQuotationController;
 use App\Http\Controllers\ThreeMaterialsController;
+use App\Http\Controllers\ThreeInventoryController;
 use App\Http\Controllers\ThreeSceneController;
+use App\Http\Controllers\ThreeQuoteController;
 use App\Http\Controllers\Auth\ClientAuthController;
 use App\Models\ThreeScene;
+use App\Models\ThreeQuote;
 use Illuminate\Support\Facades\Auth;
 
 $disableViteHotIfNotReachable = function (): void {
@@ -56,15 +59,28 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
           $disableViteHotIfNotReachable();
           $user = Auth::user();
           $scenes = collect();
+          $quotesByScene = collect();
           if ($user) {
                $scenes = ThreeScene::query()
                     ->where('user_id', $user->id)
                     ->orderByDesc('updated_at')
                     ->get(['id', 'name', 'updated_at']);
+
+                $sceneIds = $scenes->pluck('id')->all();
+                if (!empty($sceneIds)) {
+                    $quotesByScene = ThreeQuote::query()
+                        ->where('user_id', $user->id)
+                        ->whereIn('three_scene_id', $sceneIds)
+                        ->orderByDesc('created_at')
+                        ->get()
+                        ->groupBy('three_scene_id')
+                        ->map(fn ($group) => $group->first());
+                }
           }
 
           return view('three.menu', [
                'scenes' => $scenes,
+               'quotesByScene' => $quotesByScene,
                'user' => $user,
           ]);
      })->name('three.demo');
@@ -84,8 +100,19 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
      Route::post('/3d/quotation', [ThreeQuotationController::class, 'generate'])
           ->name('three.quotation');
 
+     Route::get('/3d/quotes/{quoteId}/download', [ThreeQuoteController::class, 'download'])
+          ->whereNumber('quoteId')
+          ->name('three.quotes.download');
+
+     Route::post('/3d/quotes/{quoteId}/send', [ThreeQuoteController::class, 'send'])
+          ->whereNumber('quoteId')
+          ->name('three.quotes.send');
+
      Route::get('/3d/materials', [ThreeMaterialsController::class, 'index'])
           ->name('three.materials');
+
+     Route::get('/3d/inventory', [ThreeInventoryController::class, 'snapshot'])
+          ->name('three.inventory');
 });
 
 // API Chatbot (OpenAI) - excluir CSRF explícitamente

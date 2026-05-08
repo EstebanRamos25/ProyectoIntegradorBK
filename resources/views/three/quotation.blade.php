@@ -160,6 +160,9 @@
         <p class="subtitle">{{ $quotation['scene_name'] }}</p>
         <div class="meta">
             Generado: {{ $quotation['generated_at']->format('d/m/Y H:i:s') }} · Tipo de piso: {{ $quotation['floor_kind'] }}
+            @if(!empty($quotation['walls']))
+                · Cobertura paredes: {{ number_format((float) ($quotation['walls']['wall_area_m2'] ?? 0), 2, ',', '.') }} m²
+            @endif
         </div>
     </div>
 
@@ -183,6 +186,33 @@
             </div>
         </div>
     </div>
+
+    @if(!empty($quotation['walls']))
+        <div class="grid">
+            <div class="col-4">
+                <div class="card">
+                    <div class="card-title">Área paredes</div>
+                    <div class="card-value">{{ number_format((float) ($quotation['walls']['wall_area_m2'] ?? 0), 2, ',', '.') }} m²</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="card">
+                    <div class="card-title">Material paredes</div>
+                    <div class="card-value" style="font-size: 16px;">
+                        {{ (string) data_get($quotation, 'walls.material.name', '—') }}
+                    </div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="card">
+                    <div class="card-title">Piezas estimadas (paredes)</div>
+                    <div class="card-value">
+                        {{ data_get($quotation, 'walls.estimated_units') !== null ? number_format((int) $quotation['walls']['estimated_units'], 0, ',', '.') : '—' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     <div class="section-title">Medidas consideradas</div>
     <div class="grid">
@@ -212,6 +242,19 @@
                             <th>Área unitaria</th>
                             <td>{{ number_format($quotation['summary']['piece_area_m2'], 4, ',', '.') }} m² por pieza</td>
                         </tr>
+                        @if(!empty($quotation['walls']))
+                            <tr>
+                                <th>Paredes</th>
+                                <td>
+                                    <strong>Área:</strong> {{ number_format((float) ($quotation['walls']['wall_area_m2'] ?? 0), 2, ',', '.') }} m²<br>
+                                    <strong>Área pieza:</strong>
+                                    {{ data_get($quotation, 'walls.piece_area_m2') !== null ? number_format((float) $quotation['walls']['piece_area_m2'], 4, ',', '.') . ' m²' : '—' }}
+                                    <br>
+                                    <strong>Piezas estimadas:</strong>
+                                    {{ data_get($quotation, 'walls.estimated_units') !== null ? number_format((int) $quotation['walls']['estimated_units'], 0, ',', '.') : '—' }}
+                                </td>
+                            </tr>
+                        @endif
                     </tbody>
                 </table>
             </div>
@@ -268,6 +311,9 @@
                 </table>
                 <div class="note">
                     Estimación referencial basada en la cobertura del piso completo. No incluye desperdicio por cortes, instalación, transporte ni accesorios adicionales.
+                    @if(!empty($quotation['walls']))
+                        La cobertura de paredes se muestra solo como referencia (sin cálculo de precio).
+                    @endif
                     @if($quotation['prices_are_reference'])
                     @endif
                 </div>

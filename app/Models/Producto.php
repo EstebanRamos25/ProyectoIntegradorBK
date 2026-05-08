@@ -44,10 +44,16 @@ class Producto extends Model
     {
         return $this->belongsTo(Categoria::class);
     }
+
+    public function inventarios()
+    {
+        return $this->hasMany(Inventario::class);
+    }
+
     public function proyectos()
-{
-    return $this->belongsToMany(Proyecto::class, 'proyecto__productos');
-}
+    {
+        return $this->belongsToMany(Proyecto::class, 'proyecto__productos');
+    }
 
     // Spatie Activity Log configuration
     public function getActivitylogOptions(): LogOptions
