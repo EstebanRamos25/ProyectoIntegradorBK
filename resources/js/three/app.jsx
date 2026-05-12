@@ -116,6 +116,10 @@ function Controls({
   onSelectMaterial,
   selectedWallMaterialId,
   onSelectWallMaterial,
+  recommendations,
+  recommendationsLoading,
+  recommendationsError,
+  onUseRecommendation,
   wallCoverage,
   onAdd,
   canAdd,
@@ -306,6 +310,57 @@ function Controls({
               </div>
             )}
           </>
+        )}
+      </div>
+
+      <div style={{fontSize:12, opacity:0.85, marginBottom:6}}>Recomendados</div>
+      <div style={{padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, marginBottom:10}}>
+        {!selectedSceneId && (
+          <div style={{fontSize:12, opacity:0.9, lineHeight:1.3}}>
+            Carga una escena para ver recomendaciones.
+          </div>
+        )}
+
+        {!!selectedSceneId && recommendationsLoading && (
+          <div style={{fontSize:12, opacity:0.85}}>Calculando recomendaciones...</div>
+        )}
+
+        {!!selectedSceneId && !recommendationsLoading && recommendationsError && (
+          <div style={{fontSize:12, opacity:0.9, lineHeight:1.3}}>
+            {recommendationsError}
+          </div>
+        )}
+
+        {!!selectedSceneId && !recommendationsLoading && !recommendationsError && (!recommendations?.length) && (
+          <div style={{fontSize:12, opacity:0.9, lineHeight:1.3}}>
+            Sin recomendaciones por ahora.
+          </div>
+        )}
+
+        {!!selectedSceneId && !recommendationsLoading && !recommendationsError && !!recommendations?.length && (
+          <div style={{display:'flex', flexDirection:'column', gap:8}}>
+            {recommendations.map((r) => (
+              <button
+                key={r.product_id}
+                onClick={() => onUseRecommendation?.(Number(r.product_id))}
+                style={{
+                  textAlign:'left',
+                  padding:'8px 10px',
+                  borderRadius:8,
+                  border:'1px solid rgba(255,255,255,.12)',
+                  background:'#0b1220',
+                  color:'#fff',
+                  cursor:'pointer',
+                }}
+                title={`Stock: ${Number(r.stock_boxes_available ?? 0)} cajas`}
+              >
+                <div style={{fontWeight:700, fontSize:12}}>{r.name}</div>
+                <div style={{fontSize:11, opacity:0.75, marginTop:2, lineHeight:1.25}}>
+                  {r.categoria_name ? `Categoría: ${r.categoria_name} · ` : ''}Stock: {Number(r.stock_boxes_available ?? 0)} cajas
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -588,12 +643,101 @@ function Demo() {
   const [scenesError, setScenesError] = useState(null)
   const [selectedSceneId, setSelectedSceneId] = useState(null)
   const [sceneName, setSceneName] = useState('')
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
+  const [recommendationsError, setRecommendationsError] = useState(null)
+  const recoDebounceRef = useRef(null)
   const pendingSceneDataRef = useRef(null)
   const autoLoadedSceneRef = useRef(false)
   const nextId = useRef(1)
   const lastEmissive = useRef({ obj: null, color: null })
   const controlsRef = useRef(null)
   const r3fRef = useRef({ gl: null, scene: null })
+
+  const trackEvent = useCallback(async (eventType, { productId = null, value = null, meta = null } = {}) => {
+    if (!selectedSceneId) return
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+
+    try {
+      await fetch('/3d/events', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-TOKEN': csrfToken ?? '',
+        },
+        body: JSON.stringify({
+          scene_id: Number(selectedSceneId),
+          event_type: String(eventType || ''),
+          product_id: productId ? Number(productId) : null,
+          value: value !== null && value !== undefined ? Number(value) : null,
+          meta: meta && typeof meta === 'object' ? meta : null,
+        }),
+      })
+    } catch (e) {
+      // silencioso: no bloquea UX
+    }
+  }, [selectedSceneId])
+
+  const fetchRecommendations = useCallback(async () => {
+    if (!selectedSceneId) {
+      setRecommendations([])
+      setRecommendationsError(null)
+      setRecommendationsLoading(false)
+      return
+    }
+
+    setRecommendationsLoading(true)
+    setRecommendationsError(null)
+
+    try {
+      const resp = await fetch(`/3d/recommendations?scene_id=${Number(selectedSceneId)}&limit=6`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+
+      if (resp.status === 401 || resp.status === 419) {
+        setRecommendations([])
+        setRecommendationsError('Inicia sesión para ver recomendaciones.')
+        return
+      }
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+
+      const data = await resp.json()
+      const items = Array.isArray(data?.items) ? data.items : []
+      setRecommendations(items)
+
+      if (items.length) {
+        trackEvent('recommendations_shown', { meta: { count: items.length } })
+      }
+    } catch (e) {
+      console.error(e)
+      setRecommendations([])
+      setRecommendationsError('No se pudieron cargar recomendaciones.')
+    } finally {
+      setRecommendationsLoading(false)
+    }
+  }, [selectedSceneId, trackEvent])
+
+  useEffect(() => {
+    fetchRecommendations()
+  }, [fetchRecommendations])
+
+  useEffect(() => {
+    if (!selectedSceneId) return
+    if (recoDebounceRef.current) window.clearTimeout(recoDebounceRef.current)
+    recoDebounceRef.current = window.setTimeout(() => {
+      fetchRecommendations()
+    }, 900)
+    return () => {
+      if (recoDebounceRef.current) window.clearTimeout(recoDebounceRef.current)
+    }
+  }, [selectedSceneId, selectedMaterialId, selectedWallMaterialId, fetchRecommendations])
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', maximumFractionDigits: 0 }),
@@ -711,6 +855,26 @@ function Demo() {
     () => materials.find((m) => Number(m.id) === Number(selectedWallMaterialId)) ?? null,
     [materials, selectedWallMaterialId]
   )
+
+  const handleSelectMaterial = useCallback((next) => {
+    setSelectedMaterialId(next)
+    if (next) trackEvent('material_select', { productId: next, meta: { surface: 'floor' } })
+  }, [trackEvent])
+
+  const handleSelectWallMaterial = useCallback((next) => {
+    setSelectedWallMaterialId(next)
+    if (next) trackEvent('wall_material_select', { productId: next, meta: { surface: 'walls', wall: activeWallKey } })
+  }, [trackEvent, activeWallKey])
+
+  const handleUseRecommendation = useCallback((productId) => {
+    if (!productId) return
+    if (activeSurface === 'walls') {
+      setSelectedWallMaterialId(productId)
+    } else {
+      setSelectedMaterialId(productId)
+    }
+    trackEvent('recommendation_click', { productId, meta: { surface: activeSurface, wall: activeWallKey } })
+  }, [activeSurface, activeWallKey, trackEvent])
 
   const wallPiece = useMemo(() => wallPieces[0] ?? null, [wallPieces])
 
@@ -1553,6 +1717,8 @@ function Demo() {
         snapshotTop = null
       }
 
+      trackEvent('quote_generate', { meta: { has_stock_warning: inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false } })
+
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
       const response = await fetch('/3d/quotation', {
         method: 'POST',
@@ -1616,7 +1782,7 @@ function Demo() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, wallPiece, sceneName, selectedSceneId])
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, wallPiece, sceneName, selectedSceneId, trackEvent])
 
   useEffect(() => {
     if (selected && isMovable(selected) && selectedPiece) {
@@ -1789,9 +1955,13 @@ function Demo() {
         materialsLoading={materialsLoading}
         materialsError={materialsError}
         selectedMaterialId={selectedMaterialId}
-        onSelectMaterial={setSelectedMaterialId}
+        onSelectMaterial={handleSelectMaterial}
         selectedWallMaterialId={selectedWallMaterialId}
-        onSelectWallMaterial={setSelectedWallMaterialId}
+        onSelectWallMaterial={handleSelectWallMaterial}
+        recommendations={recommendations}
+        recommendationsLoading={recommendationsLoading}
+        recommendationsError={recommendationsError}
+        onUseRecommendation={handleUseRecommendation}
         wallCoverage={{ ...wallCoverageState, ...wallCoverageData, canCompute: wallCoverageData.canCompute, computed: wallCoverageState.computed }}
         onAddWalls={addOneWallPiece}
         canAddWalls={canAddWalls}

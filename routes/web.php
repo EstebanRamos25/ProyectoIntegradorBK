@@ -8,9 +8,12 @@ use App\Http\Controllers\ThreeMaterialsController;
 use App\Http\Controllers\ThreeInventoryController;
 use App\Http\Controllers\ThreeSceneController;
 use App\Http\Controllers\ThreeQuoteController;
+use App\Http\Controllers\ThreeInteractionEventController;
+use App\Http\Controllers\ThreeRecommendationController;
 use App\Http\Controllers\Auth\ClientAuthController;
 use App\Models\ThreeScene;
 use App\Models\ThreeQuote;
+use App\Models\Producto;
 use Illuminate\Support\Facades\Auth;
 
 $disableViteHotIfNotReachable = function (): void {
@@ -44,7 +47,47 @@ $disableViteHotIfNotReachable = function (): void {
 
 // Root redirect to Orchid admin prefix (e.g., /admin)
 Route::get('/', function () {
-     return view('home');
+     $homeProducts = Producto::query()
+          ->with(['categoria', 'attachment'])
+          ->orderByDesc('id')
+          ->get()
+          ->map(function (Producto $p): array {
+               $image = $p->attachment('image')->first();
+
+               $imageUrl = null;
+               $hasImage = false;
+               if ($image) {
+                    if (is_object($image) && method_exists($image, 'url')) {
+                         $imageUrl = $image->url();
+                    }
+                    if (empty($imageUrl)) {
+                         $path = $image->path ?? null;
+                         if ($path) {
+                              $base = config('filesystems.disks.public.url', url('/storage'));
+                              $imageUrl = rtrim($base, '/') . '/' . ltrim($path, '/');
+                         }
+                    }
+                    $hasImage = !empty($imageUrl);
+               }
+
+               if (empty($imageUrl)) {
+                    $svg = rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect fill="#f3f4f6" width="100%" height="100%"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9ca3af" font-size="28" font-family="Arial, Helvetica, sans-serif">Sin imagen</text></svg>');
+                    $imageUrl = 'data:image/svg+xml;utf8,' . $svg;
+               }
+
+               return [
+                    'id' => $p->id,
+                    'name' => (string) ($p->Nombre ?? ('Producto #' . $p->id)),
+                    'category' => (string) (optional($p->categoria)->Nombre ?? ''),
+                    'price' => $p->Precio,
+                    'image' => $imageUrl,
+                    'has_image' => $hasImage,
+               ];
+          });
+
+     return view('home', [
+          'homeProducts' => $homeProducts,
+     ]);
 });
 
 // Cliente: login/registro (se usa el nombre de ruta "login" para que el middleware auth redirija correctamente)
@@ -113,6 +156,12 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
 
      Route::get('/3d/inventory', [ThreeInventoryController::class, 'snapshot'])
           ->name('three.inventory');
+
+     Route::post('/3d/events', [ThreeInteractionEventController::class, 'store'])
+          ->name('three.events.store');
+
+     Route::get('/3d/recommendations', [ThreeRecommendationController::class, 'index'])
+          ->name('three.recommendations');
 });
 
 // API Chatbot (OpenAI) - excluir CSRF explícitamente

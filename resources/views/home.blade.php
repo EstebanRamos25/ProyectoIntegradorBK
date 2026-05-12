@@ -7,7 +7,7 @@
 
     <title>{{ config('app.name', 'Sistema') }}</title>
 
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/home.js'])
     
     <style>
         :root {
@@ -59,6 +59,12 @@
             background-position: center;
             background-repeat: no-repeat;
             border: 1px solid var(--color-border);
+        }
+
+        [data-home-product-card].is-active {
+            border-color: rgba(184, 149, 106, 0.7) !important;
+            box-shadow: 0 16px 32px rgba(139, 111, 71, 0.16);
+            transform: translateY(-2px);
         }
 
         /* Dark premium hero (solo para la sección Hero) */
@@ -131,6 +137,8 @@
         $adminLoginUrl = $adminUrl . '/login';
         $clientLoginUrl = route('login');
         $clientRegisterUrl = route('register');
+        $homeProducts = collect($homeProducts ?? []);
+        $firstHomeProduct = $homeProducts->first();
 
         // Sube tus imágenes a: public/images/home/
         // Puedes reemplazar los archivos manteniendo estos nombres.
@@ -310,12 +318,100 @@
             </div>
         </section>
 
+        <!-- Productos -->
+        <section class="mb-20">
+            <div class="mb-8 flex items-end justify-between gap-6">
+                <div>
+                    <h2 class="text-3xl font-semibold" style="color: var(--color-charcoal);">Productos destacados</h2>
+                    <p class="mt-2 text-sm" style="color: var(--color-warm-gray);">Productos reales registrados en el sistema, con vista 3D rotatable para una primera impresión más atractiva.</p>
+                </div>
+                <a href="{{ route('three.demo') }}" class="hidden text-sm font-semibold sm:inline-flex" style="color: var(--color-wood);">
+                    Ver catálogo 3D completo
+                </a>
+            </div>
+
+            <div class="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+                <div class="hero-card overflow-hidden rounded-3xl p-5">
+                    <div class="mb-4 flex items-start justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.24em]" style="color: var(--color-warm-gray);">Vista 3D interactiva</div>
+                            <h3 class="mt-2 text-2xl font-semibold" data-home-3d-title style="color: var(--color-charcoal);">{{ data_get($firstHomeProduct, 'name', 'Selecciona un producto') }}</h3>
+                            <p class="mt-2 text-sm" data-home-3d-meta style="color: var(--color-warm-gray);">
+                                {{ data_get($firstHomeProduct, 'category', 'Arrastra para rotar y explorar texturas') }}
+                            </p>
+                        </div>
+                        <div class="rounded-full px-4 py-2 text-xs font-semibold" style="background: rgba(184,149,106,0.14); color: var(--color-wood);">
+                            Arrastra para rotar
+                        </div>
+                    </div>
+
+                    <div class="relative overflow-hidden rounded-2xl border" style="border-color: var(--color-border); background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,255,255,0.95));">
+                        <canvas data-home-3d-canvas class="block h-[420px] w-full"></canvas>
+                        <div data-home-3d-empty class="absolute inset-0 flex items-center justify-center px-6 text-center text-sm font-medium" style="color: var(--color-warm-gray);">
+                            @if($homeProducts->isEmpty())
+                                Aún no hay productos registrados para mostrar en el visor 3D.
+                            @else
+                                Cargando visualización 3D del producto...
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    @if($homeProducts->isEmpty())
+                        <div class="rounded-3xl border p-8 text-sm" style="border-color: var(--color-border); background: var(--surface-solid); color: var(--color-warm-gray);">
+                            Aún no hay productos registrados para mostrar en el home.
+                        </div>
+                    @else
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            @foreach($homeProducts->take(8) as $product)
+                                <button
+                                    type="button"
+                                    data-home-product-card
+                                    data-home-product-image="{{ $product['image'] }}"
+                                    data-home-product-name="{{ $product['name'] }}"
+                                    data-home-product-category="{{ $product['category'] ?: 'Sin categoría' }}"
+                                    class="group overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                                    style="border-color: var(--color-border); background: var(--surface-solid);"
+                                >
+                                    <div class="relative aspect-[4/3] overflow-hidden">
+                                        <img
+                                            src="{{ $product['image'] }}"
+                                            alt="{{ $product['name'] }}"
+                                            class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                            loading="lazy"
+                                        >
+                                        <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+                                        <div class="absolute left-3 top-3 rounded-full px-3 py-1 text-[11px] font-semibold" style="background: rgba(11,11,12,0.72); color: rgba(255,255,255,0.92);">
+                                            @if($loop->first)
+                                                Vista inicial
+                                            @else
+                                                Toca para rotar
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="space-y-2 p-4">
+                                        <div class="text-sm font-semibold" style="color: var(--color-charcoal);">{{ $product['name'] }}</div>
+                                        <div class="text-xs uppercase tracking-[0.18em]" style="color: var(--color-warm-gray);">{{ $product['category'] ?: 'Sin categoría' }}</div>
+                                        <div class="flex items-center justify-between pt-2 text-sm">
+                                            <span style="color: var(--color-warm-gray);">Precio</span>
+                                            <span class="font-semibold" style="color: var(--color-wood);">{{ $product['price'] !== null ? '$' . number_format((float) $product['price'], 2) : '—' }}</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </section>
+
         <!-- Products Preview -->
         <section class="mb-20">
             <h2 class="mb-8 text-3xl font-semibold" style="color: var(--color-charcoal);">Nuestros servicios</h2>
             <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <!-- Panel Administrativo -->
-            <div class="group rounded-2xl border p-8 transition-all duration-300 hover:shadow-lg" style="border-color: var(--color-border); background: var(--surface-solid);">
+                <div class="group rounded-2xl border p-8 transition-all duration-300 hover:shadow-lg" style="border-color: var(--color-border); background: var(--surface-solid);">
                     <div class="mb-4 inline-block rounded-lg p-3" style="background: rgba(139, 111, 71, 0.08);">
                         <svg class="h-6 w-6" style="color: var(--color-wood);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
