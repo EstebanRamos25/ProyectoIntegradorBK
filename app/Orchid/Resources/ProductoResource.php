@@ -3,6 +3,7 @@
 namespace App\Orchid\Resources;
 
 use App\Models\Inventario;
+use App\Orchid\Filters\ProductoSearchFilter;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -104,6 +105,14 @@ class ProductoResource extends Resource
                     ->placeholder('Ej: 100')
                     ->help('Si lo dejas vacío, el sistema lo inicializa igual a cajas de entrada.'),
             ])->autoWidth(),
+                Group::make([
+                    Input::make('initial_inventory.Costo_M2')
+                        ->type('number')
+                        ->step(0.01)
+                        ->title('Costo compra por m²')
+                        ->placeholder('Ej: 120.00')
+                        ->help('Si lo dejas vacío, se toma el costo del producto.'),
+                ])->autoWidth(),
 
             Group::make([
                 Input::make('initial_inventory.Ubicacion')
@@ -256,7 +265,9 @@ class ProductoResource extends Resource
 
     public function filters(): array
     {
-        return [];
+        return [
+            ProductoSearchFilter::class,
+        ];
     }
 
     public function save(Request $request, Model $model): void
@@ -276,6 +287,9 @@ class ProductoResource extends Resource
             $cantidadLegacy = array_key_exists('Cantidad', $initial) && $initial['Cantidad'] !== ''
                 ? (int) ($initial['Cantidad'] ?? 0)
                 : null;
+                $costoM2 = array_key_exists('Costo_M2', $initial) && $initial['Costo_M2'] !== ''
+                    ? (float) ($initial['Costo_M2'] ?? 0)
+                    : ($model->Costo_M2 !== null ? (float) $model->Costo_M2 : null);
 
             $hasStockValue = (
                 ($cajasEntrada !== null && $cajasEntrada > 0)
@@ -292,6 +306,7 @@ class ProductoResource extends Resource
                     'Estado' => isset($initial['Estado']) ? (string) ($initial['Estado'] ?? '') : null,
                     'Cajas_Entrada' => $cajasEntrada,
                     'Cajas_Disponibles' => $cajasDisponibles,
+                    'Costo_M2' => $costoM2,
                     'Cantidad' => $cantidadLegacy,
                 ]);
             }

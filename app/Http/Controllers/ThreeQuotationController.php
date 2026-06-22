@@ -9,7 +9,6 @@ use App\Models\Promocion;
 use App\Models\Producto;
 use App\Models\ThreeQuote;
 use App\Models\ThreeScene;
-use App\Models\Venta;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -133,7 +132,6 @@ class ThreeQuotationController extends Controller
         }
 
         $inventoryCheck = null;
-        $pickedInventarioId = null;
         if ($producto && $boxesRequired !== null) {
             $lotsAgg = Inventario::query()
                 ->where('producto_id', $producto->id)
@@ -154,15 +152,6 @@ class ThreeQuotationController extends Controller
             $bestLotBoxes = $bestLot ? (int) $bestLot['boxes_available'] : 0;
 
             $bestLotCode = $bestLot['lot_code'] ?? null;
-            if ($bestLotCode !== null) {
-                $pickedInventarioId = Inventario::query()
-                    ->where('producto_id', $producto->id)
-                    ->where('Codigo_Lote', $bestLotCode)
-                    ->orderByDesc('Cajas_Disponibles')
-                    ->orderByDesc('Cantidad')
-                    ->orderBy('id')
-                    ->value('id');
-            }
 
             $inventoryCheck = [
                 'product_id' => (int) $producto->id,
@@ -254,32 +243,6 @@ class ThreeQuotationController extends Controller
             $quote->area_m2 = $floorAreaM2;
             $quote->total = (float) $quotation['summary']['total_after_discount'];
             $quote->save();
-        }
-
-        // Registrar venta/cotización (no afecta stock): útil para reportes de ganancia (admin)
-        $costoM2 = $producto ? ($producto->Costo_M2 !== null ? (float) $producto->Costo_M2 : null) : null;
-        $costoTotal = $costoM2 !== null ? round($floorAreaM2 * $costoM2, 0) : null;
-        $ganancia = $costoTotal !== null ? round(((float) $quotation['summary']['total_after_discount']) - $costoTotal, 0) : null;
-
-        if ($request->user()) {
-            Venta::query()->create([
-                'Total' => (float) $quotation['summary']['total_after_discount'],
-                'Fecha' => now()->toDateString(),
-                'Origen' => '3d_quotation',
-                'three_quote_id' => $quote?->id,
-                'usuario_id' => (int) $request->user()->id,
-                'promocion_id' => $appliedPromotion?->id,
-                'inventario_id' => $pickedInventarioId,
-                'producto_id' => $producto?->id,
-                'Area_M2' => $floorAreaM2,
-                'Precio_M2' => $unitPriceM2,
-                'Subtotal' => $estimatedTotal,
-                'Descuento_Pct' => $discountPct > 0 ? $discountPct : null,
-                'Descuento_Monto' => $discountPct > 0 ? $discountAmount : null,
-                'Costo_M2' => $costoM2,
-                'Costo_Total' => $costoTotal,
-                'Ganancia' => $ganancia,
-            ]);
         }
 
         $pdf = Pdf::loadView('three.quotation', [

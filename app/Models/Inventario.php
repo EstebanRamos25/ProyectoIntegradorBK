@@ -21,6 +21,7 @@ class Inventario extends Model
         "Calibre",
         "Cajas_Entrada",
         "Cajas_Disponibles",
+        "Costo_M2",
         "Fecha_Ingreso",
         "producto_id",
     ];

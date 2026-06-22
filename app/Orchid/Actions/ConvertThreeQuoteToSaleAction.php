@@ -95,6 +95,9 @@ class ConvertThreeQuoteToSaleAction extends Action
                     $remaining = $boxesRequired;
                     $firstInventarioId = null;
                     $takes = [];
+                    $m2PerBox = (float) ($producto->M2_Por_Caja ?? 0);
+                    $totalCost = 0.0;
+                    $hasCost = false;
 
                     foreach ($inventarios as $inv) {
                         if ($remaining <= 0) {
@@ -113,6 +116,15 @@ class ConvertThreeQuoteToSaleAction extends Action
 
                         if ($firstInventarioId === null) {
                             $firstInventarioId = (int) $inv->id;
+                        }
+
+                        $lotCostM2 = $inv->Costo_M2 !== null
+                            ? (float) $inv->Costo_M2
+                            : ($producto->Costo_M2 !== null ? (float) $producto->Costo_M2 : null);
+
+                        if ($lotCostM2 !== null && $m2PerBox > 0) {
+                            $totalCost += $take * $m2PerBox * $lotCostM2;
+                            $hasCost = true;
                         }
 
                         if ($inv->Cajas_Disponibles !== null) {
@@ -142,9 +154,11 @@ class ConvertThreeQuoteToSaleAction extends Action
                     $promocionId = data_get($lockedQuote->quotation, 'promotion.id');
                     $promocionId = $promocionId ? (int) $promocionId : null;
 
-                    $costoM2 = $producto->Costo_M2 !== null ? (float) $producto->Costo_M2 : null;
-                    $costoTotal = $costoM2 !== null ? round($areaM2 * $costoM2, 0) : null;
-                    $ganancia = $costoTotal !== null ? round($total - $costoTotal, 0) : null;
+                    $costoTotal = $hasCost ? round($totalCost, 2) : null;
+                    $costoM2 = ($costoTotal !== null && $areaM2 > 0)
+                        ? round($costoTotal / $areaM2, 2)
+                        : null;
+                    $ganancia = $costoTotal !== null ? round($total - $costoTotal, 2) : null;
 
                     $venta = Venta::query()->create([
                         'Total' => $total,

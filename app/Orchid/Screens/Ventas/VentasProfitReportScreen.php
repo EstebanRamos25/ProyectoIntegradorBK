@@ -20,7 +20,7 @@ class VentasProfitReportScreen extends Screen
 {
     public $name = 'Reporte de ganancias';
 
-    public $description = 'Ganancia estimada por cotización/venta generada desde la experiencia 3D.';
+    public $description = 'Ganancia estimada por ventas confirmadas generadas desde la experiencia 3D.';
 
     public function permission(): ?iterable
     {
@@ -36,7 +36,7 @@ class VentasProfitReportScreen extends Screen
 
         $ventasQuery = Venta::query()
             ->with(['usuario:id,name', 'producto:id,Nombre', 'promocion:id,Nombre,Descuento,Min_M2'])
-            ->where('Origen', '3d_quotation')
+            ->where('Origen', '3d_sale')
             ->orderByDesc('created_at');
 
         if ($from) {
@@ -128,7 +128,7 @@ class VentasProfitReportScreen extends Screen
 
         $ventasQuery = Venta::query()
             ->with(['usuario:id,name', 'producto:id,Nombre', 'promocion:id,Nombre,Descuento,Min_M2'])
-            ->where('Origen', '3d_quotation')
+            ->where('Origen', '3d_sale')
             ->orderByDesc('created_at');
 
         if ($from) {

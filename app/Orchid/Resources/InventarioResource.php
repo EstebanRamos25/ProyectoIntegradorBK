@@ -46,6 +46,13 @@ class InventarioResource extends Resource
                 ->placeholder('Ej: 75')
                 ->help('Si lo dejas vacío al crear, el sistema lo inicializa igual a Cajas_Entrada.'),
 
+            Input::make('Costo_M2')
+                ->type('number')
+                ->step(0.01)
+                ->title('Costo de compra por m²')
+                ->placeholder('Ej: 120.00')
+                ->help('Costo real de compra de este lote. Se usa para valuación y ganancia.'),
+
             Input::make('Codigo_Lote')
                 ->title('Código de lote')
                 ->placeholder('Ej: 2024-A')
@@ -95,6 +102,7 @@ class InventarioResource extends Resource
             TD::make('Tono', 'TONO'),
             TD::make('Calibre', 'CALIBRE'),
             TD::make('Cajas_Disponibles', 'CAJAS DISP.'),
+            TD::make('Costo_M2', 'COSTO/M²'),
             TD::make('Cajas_Entrada', 'CAJAS ENTR.'),
             TD::make('Cantidad', 'CANTIDAD (LEGACY)'),
             TD::make('Ubicacion', 'UBICACIÓN'),
@@ -126,6 +134,7 @@ class InventarioResource extends Resource
             Sight::make('Tono', 'TONO'),
             Sight::make('Calibre', 'CALIBRE'),
             Sight::make('Cajas_Disponibles', 'CAJAS DISPONIBLES'),
+            Sight::make('Costo_M2', 'COSTO/M²'),
             Sight::make('Cajas_Entrada', 'CAJAS DE ENTRADA'),
             Sight::make('Cantidad', 'CANTIDAD (LEGACY)'),
             Sight::make('Ubicacion', 'UBICACIÓN'),

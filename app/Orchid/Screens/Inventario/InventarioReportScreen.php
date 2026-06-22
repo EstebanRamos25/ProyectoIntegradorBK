@@ -96,6 +96,7 @@ class InventarioReportScreen
                     'calibre' => (string) ($i->Calibre ?: '—'),
                     'cajas_disponibles' => (int) ($i->Cajas_Disponibles ?? 0),
                     'cajas_entrada' => (int) ($i->Cajas_Entrada ?? 0),
+                    'costo_m2' => $i->Costo_M2 !== null ? (float) $i->Costo_M2 : null,
                     'legacy_cantidad' => (int) ($i->Cantidad ?? 0),
                     'ubicacion' => (string) ($i->Ubicacion ?: '—'),
                     'estado' => (string) ($i->Estado ?: '—'),

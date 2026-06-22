@@ -106,7 +106,7 @@ class DbInsightsService
             $total = Producto::query()->count();
             $categories = Categoria::query()->count();
             $invRows = Inventario::query()->count();
-            $units = (int) Inventario::query()->sum('Cantidad');
+            $units = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
 
             return "Estás en el módulo de PRODUCTOS. Resumen rápido:\n" .
                 "- Productos registrados: {$total}\n" .
@@ -117,7 +117,7 @@ class DbInsightsService
 
         if ($module === 'inventarios') {
             $rows = Inventario::query()->count();
-            $units = (int) Inventario::query()->sum('Cantidad');
+            $units = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
             $productsWithInv = Inventario::query()->whereNotNull('producto_id')->distinct('producto_id')->count('producto_id');
 
             return "Estás en el módulo de INVENTARIOS. Resumen rápido:\n" .
@@ -376,7 +376,7 @@ class DbInsightsService
             $total = Producto::query()->count();
             $categories = Categoria::query()->count();
             $invRows = Inventario::query()->count();
-            $units = (int) Inventario::query()->sum('Cantidad');
+            $units = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
 
             return "Resumen de productos:\n" .
                 "- Productos registrados: {$total}\n" .
@@ -395,7 +395,7 @@ class DbInsightsService
 
             $total = Producto::query()->count();
             $invRows = Inventario::query()->count();
-            $units = (int) Inventario::query()->sum('Cantidad');
+            $units = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
             return "En productos hay {$total} registros. En inventario hay {$units} existencias (en {$invRows} registros).";
         }
 
@@ -417,7 +417,7 @@ class DbInsightsService
             )
         ) {
             $row = Inventario::query()
-                ->selectRaw('producto_id, SUM(COALESCE(Cantidad,0)) as total')
+                ->selectRaw('producto_id, SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)) as total')
                 ->groupBy('producto_id')
                 ->orderByDesc('total')
                 ->with('producto:id,Nombre')
@@ -435,7 +435,7 @@ class DbInsightsService
         // 3) Top 5 por inventario
         if (Str::contains($text, ['top 5', 'top5', 'top cinco', '5']) && Str::contains($text, ['producto', 'stock', 'inventario'])) {
             $rows = Inventario::query()
-                ->selectRaw('producto_id, SUM(COALESCE(Cantidad,0)) as total')
+                ->selectRaw('producto_id, SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)) as total')
                 ->groupBy('producto_id')
                 ->orderByDesc('total')
                 ->with('producto:id,Nombre')
@@ -494,7 +494,8 @@ class DbInsightsService
                     }
                 });
             })
-            ->sum('Cantidad');
+            ->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')
+            ->value('total');
 
         if ($productsCount === 0) {
             return "No encontré productos que parezcan baldosas/azulejos cerámicos por nombre o descripción. Si me dices el nombre exacto (o una palabra clave del producto), lo busco mejor.";
@@ -507,7 +508,7 @@ class DbInsightsService
     {
         if ($this->wantsSummary($text)) {
             $rows = Inventario::query()->count();
-            $sum = (int) Inventario::query()->sum('Cantidad');
+            $sum = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
             $productsWithInv = Inventario::query()->whereNotNull('producto_id')->distinct('producto_id')->count('producto_id');
             return "Resumen de inventarios:\n" .
                 "- Registros: {$rows}\n" .
@@ -523,7 +524,7 @@ class DbInsightsService
 
         // Total de unidades (suma Cantidad)
         if ($this->wantsCount($text) && Str::contains($text, ['unidades', 'cantidad', 'stock'])) {
-            $sum = (int) Inventario::query()->sum('Cantidad');
+            $sum = (int) Inventario::query()->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
             return "La suma total de existencias (Cantidad) en inventario es {$sum}.";
         }
 

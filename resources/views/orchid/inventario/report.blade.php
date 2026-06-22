@@ -220,6 +220,7 @@
                 <th class="nowrap">Calibre</th>
                 <th class="nowrap">Cajas disp.</th>
                 <th class="nowrap">Cajas entr.</th>
+                <th class="nowrap">Costo/m²</th>
                 <th class="nowrap">Cant. legacy</th>
                 <th>Ubicación</th>
                 <th class="nowrap">Estado</th>
@@ -237,6 +238,7 @@
                     <td class="nowrap">{{ $row['calibre'] }}</td>
                     <td class="nowrap">{{ number_format((int)$row['cajas_disponibles'], 0, ',', '.') }}</td>
                     <td class="nowrap">{{ number_format((int)$row['cajas_entrada'], 0, ',', '.') }}</td>
+                    <td class="nowrap">{{ $row['costo_m2'] !== null ? number_format((float)$row['costo_m2'], 2, ',', '.') : '—' }}</td>
                     <td class="nowrap">{{ number_format((int)$row['legacy_cantidad'], 0, ',', '.') }}</td>
                     <td>{{ $row['ubicacion'] }}</td>
                     <td class="nowrap">{{ $row['estado'] }}</td>
