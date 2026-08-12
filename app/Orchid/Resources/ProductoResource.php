@@ -287,9 +287,9 @@ class ProductoResource extends Resource
             $cantidadLegacy = array_key_exists('Cantidad', $initial) && $initial['Cantidad'] !== ''
                 ? (int) ($initial['Cantidad'] ?? 0)
                 : null;
-                $costoM2 = array_key_exists('Costo_M2', $initial) && $initial['Costo_M2'] !== ''
-                    ? (float) ($initial['Costo_M2'] ?? 0)
-                    : ($model->Costo_M2 !== null ? (float) $model->Costo_M2 : null);
+            $costoM2 = array_key_exists('Costo_M2', $initial) && $initial['Costo_M2'] !== ''
+                ? (float) ($initial['Costo_M2'] ?? 0)
+                : ($model->Costo_M2 !== null ? (float) $model->Costo_M2 : null);
 
             $hasStockValue = (
                 ($cajasEntrada !== null && $cajasEntrada > 0)

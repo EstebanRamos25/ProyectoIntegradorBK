@@ -565,20 +565,22 @@ function Controls({
 
       <div style={{height:10}} />
 
-      {activeSurface === 'floor' && (
-        <button
-          onClick={onGenerateQuote}
-          disabled={!quoteSummary?.ready || quoteLoading}
-          style={{width:'100%', padding:'10px 10px', borderRadius:8, border:'none', background: quoteSummary?.ready && !quoteLoading ? '#2563eb' : '#374151', color:'#fff', cursor: quoteSummary?.ready && !quoteLoading ? 'pointer' : 'not-allowed'}}
-          title={
-            !quoteSummary?.ready
-              ? 'Agrega una pieza para cotizar el escenario'
-              : 'Genera un PDF con la cotización estimada'
-          }
-        >
-          {quoteLoading ? 'Generando PDF...' : 'Generar cotización PDF'}
-        </button>
-      )}
+      <button
+        onClick={onGenerateQuote}
+        disabled={!quoteSummary?.ready || quoteLoading}
+        style={{width:'100%', padding:'10px 10px', borderRadius:8, border:'none', background: quoteSummary?.ready && !quoteLoading ? '#2563eb' : '#374151', color:'#fff', cursor: quoteSummary?.ready && !quoteLoading ? 'pointer' : 'not-allowed'}}
+        title={
+          !quoteSummary?.ready
+            ? 'Agrega una pieza para cotizar el escenario'
+            : 'Genera un PDF con la cotización estimada'
+        }
+      >
+        {quoteLoading ? 'Generando PDF...' : 'Generar cotización PDF'}
+      </button>
+
+      <div style={{fontSize:11, opacity:0.72, marginTop:8, lineHeight:1.25}}>
+        El PDF de cotización se genera sin descontar inventario. La venta confirmada es la que descuenta stock.
+      </div>
 
       {activeSurface === 'floor' && quoteSummary?.ready && (
         <div style={{marginTop:10, padding:'10px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10}}>
@@ -1118,13 +1120,13 @@ function Demo() {
   const saveScene = useCallback(async () => {
     if (scenesError) {
       window.alert('Inicia sesión para guardar escenarios.')
-      return
+      return null
     }
 
     const name = String(sceneName || '').trim()
     if (!name) {
       window.alert('Escribe un nombre para el escenario antes de guardar.')
-      return
+      return null
     }
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
@@ -1147,7 +1149,7 @@ function Demo() {
 
       if (resp.status === 401 || resp.status === 419) {
         window.alert('Inicia sesión para guardar escenarios.')
-        return
+        return null
       }
 
       if (!resp.ok) {
@@ -1176,9 +1178,11 @@ function Demo() {
       }
 
       window.alert('Escenario guardado.')
+      return savedId
     } catch (err) {
       console.error(err)
       window.alert(String(err?.message || 'No se pudo guardar el escenario.'))
+      return null
     }
   }, [sceneName, selectedSceneId, buildScenePayload, scenesError])
 
@@ -1695,6 +1699,12 @@ function Demo() {
   const handleGenerateQuote = useCallback(async () => {
     if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
 
+    let sceneId = selectedSceneId
+    if (!sceneId) {
+      sceneId = await saveScene()
+      if (!sceneId) return
+    }
+
     if (inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false) {
       const ok = window.confirm(
         `Stock insuficiente según inventario (en tiempo real).\n\n` +
@@ -1730,7 +1740,7 @@ function Demo() {
         },
         body: JSON.stringify({
           material_id: quotePiece?.material?.id ?? null,
-          scene_id: selectedSceneId ?? null,
+          scene_id: sceneId ?? null,
           scene_name: String(sceneName || '').trim() || 'Escena 3D personalizada',
           floor_kind: floor,
           snapshot_top_png_data_url: snapshotTop,
@@ -1782,7 +1792,7 @@ function Demo() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, wallPiece, sceneName, selectedSceneId, trackEvent])
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, wallPiece, sceneName, selectedSceneId, trackEvent, saveScene])
 
   useEffect(() => {
     if (selected && isMovable(selected) && selectedPiece) {
