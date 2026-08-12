@@ -15,11 +15,11 @@ class Venta extends Model
     protected $fillable = [
         "Total",
         "Fecha",
-        "Origen",
+        "Origen",          // '3d_sale' para ventas desde la experiencia 3D
         "three_quote_id",
         "usuario_id",
         "promocion_id",
-        "inventario_id",
+        "inventario_id",   // @legacy: primer lote descontado (referencia rápida). El detalle real está en VentaInventario.
         "producto_id",
         "Area_M2",
         "Precio_M2",
@@ -59,13 +59,28 @@ class Venta extends Model
         return $this->belongsTo(Producto::class);
     }
 
+    /**
+     * @legacy Referencia al primer inventario descontado.
+     * Para el detalle completo de cajas por lote, usar inventariosDescontados().
+     */
     public function inventario()
     {
         return $this->belongsTo(Inventario::class);
     }
 
+    /**
+     * Relación principal (nuevo flujo): detalle de inventarios descontados por lote FIFO.
+     */
     public function inventariosDescontados()
     {
         return $this->hasMany(VentaInventario::class);
+    }
+
+    /**
+     * Cotización 3D que originó esta venta (si proviene del flujo 3D).
+     */
+    public function threeQuote()
+    {
+        return $this->belongsTo(ThreeQuote::class, 'three_quote_id');
     }
 }

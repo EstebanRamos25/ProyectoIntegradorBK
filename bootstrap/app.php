@@ -16,6 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             VerifyCsrfToken::class,
         ]);
+        
+        $middleware->redirectUsersTo(function (\Illuminate\Http\Request $request) {
+            $user = $request->user();
+            if ($user && method_exists($user, 'inRole') && $user->inRole('client')) {
+                return route('three.demo');
+            }
+            return config('platform.index') ? route(config('platform.index')) : '/admin';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

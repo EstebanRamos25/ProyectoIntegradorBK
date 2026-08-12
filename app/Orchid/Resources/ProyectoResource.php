@@ -2,117 +2,74 @@
 
 namespace App\Orchid\Resources;
 
-use App\Models\Proyecto;
-use App\Models\User; // Asegúrate de importar el modelo correcto
-use App\Models\Producto;
+use App\Models\User;
 use Orchid\Crud\Resource;
 use Orchid\Screen\Fields\Input;
-use Orchid\Screen\Fields\Select;
 use Orchid\Screen\Sight;
 use Orchid\Screen\TD;
+use Illuminate\Database\Eloquent\Model;
+use Orchid\Crud\ResourceRequest;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProyectoResource extends Resource
 {
-    /**
-     * The model the resource corresponds to.
-     *
-     * @var string
-     */
-    public static $model = Proyecto::class;
+    public static $model = User::class;
 
-    /**
-     * Get the fields displayed by the resource.
-     *
-     * @return array
-     */
+    public static function label(): string
+    {
+        return 'Actividad por Usuario (3D)';
+    }
+
+    public static function singularLabel(): string
+    {
+        return 'Actividad de Usuario';
+    }
+
+    public static function description(): ?string
+    {
+        return 'Resumen de escenas y cotizaciones generadas por cada cliente.';
+    }
+
+    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $model->newQuery()
+            ->withCount(['threeScenes', 'threeQuotes'])
+            ->having('three_scenes_count', '>', 0)
+            ->orHaving('three_quotes_count', '>', 0);
+    }
+
     public function fields(): array
     {
         return [
-            Input::make('Nombre')
-                ->title('Nombre')
-                ->placeholder('Ingresa el nombre del proyecto'),
-
-            Input::make('Descripcion')
-                ->title('Descripcion')
-                ->placeholder('Ingresa la descripcion del proyecto'),
-
-            Input::make('Tipo_Proyecto')
-                ->title('Tipo de Proyecto')
-                ->placeholder('Ingresa el tipo de proyecto'),
-
-            // Selector para usuario relacionado
-            Select::make('user_id')
-                ->title('Usuario')
-                ->fromModel(User::class, 'name')
-                ->empty('Selecciona un usuario'),
-
-            // Selector para producto relacionado
-            Select::make('producto_id')
-                ->title('Producto')
-                ->fromModel(Producto::class, 'Nombre')
-                ->empty('Selecciona un producto')
+            Input::make('name')->title('Nombre')->readonly(),
         ];
     }
 
-    /**
-     * Get the columns displayed by the resource.
-     *
-     * @return TD[]
-     */
     public function columns(): array
     {
         return [
-            TD::make('id'),
-            TD::make('Nombre', 'NOMBRE'),
-            TD::make('Descripcion', 'DESCRIPCION'),
-            TD::make('Tipo_Proyecto', 'TIPO DE PROYECTO'),
-            TD::make('user.name', 'USUARIO'), // Muestra el nombre del usuario relacionado
-            TD::make('producto.Nombre', 'PRODUCTO'),
-
-            TD::make('created_at', 'Date of creation')
-                ->render(function ($model) {
-                    return $model->created_at->toDateTimeString();
-                }),
-
-            TD::make('updated_at', 'Update date')
-                ->render(function ($model) {
-                    return $model->updated_at->toDateTimeString();
-                }),
+            TD::make('id', 'ID'),
+            TD::make('name', 'CLIENTE'),
+            TD::make('email', 'CORREO'),
+            TD::make('three_scenes_count', 'ESCENAS 3D GUARDADAS'),
+            TD::make('three_quotes_count', 'COTIZACIONES GENERADAS'),
+            TD::make('created_at', 'REGISTRADO')->render(function ($model) {
+                return $model->created_at->toFormattedDateString();
+            }),
         ];
     }
 
-    /**
-     * Get the sights displayed by the resource.
-     *
-     * @return Sight[]
-     */
     public function legend(): array
     {
         return [
             Sight::make('id', 'ID'),
-            Sight::make('Nombre', 'NOMBRE'),
-            Sight::make('Descripcion', 'DESCRIPCION'),
-            Sight::make('Tipo_Proyecto', 'TIPO DE PROYECTO'),
-            Sight::make('user.name', 'USUARIO'),
-            Sight::make('producto.Nombre', 'PRODUCTO'),
-            Sight::make('created_at', 'Date of creation'),
-            Sight::make('updated_at', 'Update date'),
+            Sight::make('name', 'CLIENTE'),
+            Sight::make('email', 'CORREO'),
+            Sight::make('three_scenes_count', 'ESCENAS 3D'),
+            Sight::make('three_quotes_count', 'COTIZACIONES'),
         ];
     }
 
-    /**
-     * Eager load relations for index to avoid N+1 and enable related columns.
-     */
-    public function with(): array
-    {
-        return ['user', 'producto'];
-    }
-
-    /**
-     * Get the filters available for the resource.
-     *
-     * @return array
-     */
     public function filters(): array
     {
         return [];

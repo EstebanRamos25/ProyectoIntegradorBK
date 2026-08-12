@@ -53,11 +53,8 @@ class VentaResource extends Resource
                 ->fromModel(Promocion::class, 'Nombre')
                 ->empty('Selecciona una promoción'),
 
-            // Selector para inventario relacionado
-            Select::make('inventario_id')
-                ->title('Inventario')
-                ->fromModel(Inventario::class, 'id') // Puedes cambiar 'id' por otro campo más descriptivo si es necesario
-                ->empty('Selecciona un inventario'),
+            // El campo inventario_id es legacy. Las ventas ahora registran el detalle
+            // de inventarios múltiples en VentaInventario.
 
             Select::make('producto_id')
                 ->title('Producto')

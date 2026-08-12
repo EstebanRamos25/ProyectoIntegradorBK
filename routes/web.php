@@ -91,10 +91,12 @@ Route::get('/', function () {
 });
 
 // Cliente: login/registro (se usa el nombre de ruta "login" para que el middleware auth redirija correctamente)
-Route::get('/login', [ClientAuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [ClientAuthController::class, 'login'])->name('client.login');
-Route::get('/register', [ClientAuthController::class, 'showRegister'])->name('register');
-Route::post('/register', [ClientAuthController::class, 'register'])->name('client.register');
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [ClientAuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [ClientAuthController::class, 'login'])->name('client.login');
+    Route::get('/register', [ClientAuthController::class, 'showRegister'])->name('register');
+    Route::post('/register', [ClientAuthController::class, 'register'])->name('client.register');
+});
 Route::post('/logout', [ClientAuthController::class, 'logout'])->name('logout');
 Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHotIfNotReachable) {
      // Menú de escenarios 3D (por usuario)

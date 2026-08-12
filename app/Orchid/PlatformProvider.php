@@ -8,22 +8,15 @@ use Orchid\Platform\Dashboard;
 use Orchid\Platform\ItemPermission;
 use Orchid\Platform\OrchidServiceProvider;
 use Orchid\Screen\Actions\Menu;
-use Orchid\Support\Color;
 
 class PlatformProvider extends OrchidServiceProvider
 {
     /**
      * Bootstrap the application services.
-     *
-     * @param Dashboard $dashboard
-     *
-     * @return void
      */
     public function boot(Dashboard $dashboard): void
     {
         parent::boot($dashboard);
-
-        // ...
     }
 
     /**
@@ -34,97 +27,82 @@ class PlatformProvider extends OrchidServiceProvider
     public function menu(): array
     {
         return [
-            /* Menu::make('Get Started')
-                ->icon('bs.book')
-                ->title('Navigation')
-                ->route(config('platform.index')),
+            // ─── Catálogo ─────────────────────────────────────────────────
+            Menu::make('Categorías')
+                ->icon('bs.tags')
+                ->route('platform.resource.list', 'categoria-resources')
+                ->title('Catálogo'),
 
-            Menu::make('Sample Screen')
-                ->icon('bs.collection')
-                ->route('platform.example')
-                ->badge(fn () => 6),
+            Menu::make('Productos')
+                ->icon('bs.grid')
+                ->route('platform.resource.list', 'producto-resources'),
 
+            // ─── Inventario ───────────────────────────────────────────────
+            Menu::make('Inventario')
+                ->icon('bs.boxes')
+                ->route('platform.resource.list', 'inventario-resources')
+                ->title('Inventario'),
 
+            // ─── Ventas ───────────────────────────────────────────────────
+            Menu::make('Cotizaciones 3D')
+                ->icon('bs.file-earmark-text')
+                ->route('platform.resource.list', 'three-quote-resources')
+                ->title('Ventas'),
 
-            Menu::make('Overview Layouts')
-                ->icon('bs.window-sidebar')
-                ->route('platform.example.layouts'),
+            Menu::make('Ventas')
+                ->icon('bs.cart-check')
+                ->route('platform.resource.list', 'venta-resources'),
 
-            Menu::make('Grid System')
-                ->icon('bs.columns-gap')
-                ->route('platform.example.grid'),
+            Menu::make('Reporte de ganancias')
+                ->icon('bs.cash-stack')
+                ->route('platform.ventas.report')
+                ->permission('platform.ventas.report'),
 
-            Menu::make('Charts')
-                ->icon('bs.bar-chart')
-                ->route('platform.example.charts'),
+            // ─── Experiencia 3D ───────────────────────────────────────────
+            Menu::make('Editor 3D')
+                ->icon('bs.box')
+                ->url('/3d')
+                ->target('_blank')
+                ->title('Experiencia 3D'),
 
-            Menu::make('Cards')
-                ->icon('bs.card-text')
-                ->route('platform.example.cards')
-                ->divider(), */
+            Menu::make('Historial de Escenas')
+                ->icon('bs.camera')
+                ->route('platform.resource.list', 'escena-resources'),
 
-            Menu::make('TQA Automatización')
-                ->icon('bs.check')  // Puedes cambiarlo si quieres otro ícono Bootstrap
-                ->title('TQA Automatización')
-                ->permission('platform.testing')
-                ->route('platform.tqa'), // ¡Aquí sí puedes usar el nombre de la ruta!
+            Menu::make('Actividad por Usuario')
+                ->icon('bs.person-lines-fill')
+                ->route('platform.resource.list', 'proyecto-resources'),
 
-
-            Menu::make(__('Users'))
+            // ─── Control de Acceso ────────────────────────────────────────
+            Menu::make('Usuarios')
                 ->icon('bs.people')
                 ->route('platform.systems.users')
                 ->permission('platform.systems.users')
-                ->title(__('Access Controls')),
+                ->title('Control de Acceso'),
 
-            Menu::make(__('Roles'))
+            Menu::make('Roles')
                 ->icon('bs.shield')
                 ->route('platform.systems.roles')
-                ->permission('platform.systems.roles')
-                ->divider(),
+                ->permission('platform.systems.roles'),
 
+            // ─── Monitoreo ────────────────────────────────────────────────
             Menu::make('Auditoría')
                 ->icon('bs.eye')
                 ->route('platform.audit')
                 ->permission('platform.audit')
                 ->title('Monitoreo'),
 
-            Menu::make('Reporte de ganancias')
-                ->icon('bs.cash-stack')
-                ->route('platform.ventas.report')
-                ->permission('platform.ventas.report')
-                ->title('Monitoreo'),
-
-            Menu::make('Cotizaciones 3D')
-                ->icon('bs.file-earmark-text')
-                ->route('platform.resource.list', 'three-quote-resources')
-                ->title('Ventas'),
-
+            // ─── Mantenimiento ────────────────────────────────────────────
             Menu::make('Backups')
                 ->icon('bs.hdd')
                 ->route('platform.backup')
                 ->permission('platform.backup')
                 ->title('Mantenimiento'),
 
-            Menu::make('Experiencia 3D (Demo)')
-                ->icon('bs.box')
-                ->route('platform.three.demo')
-                ->title('Experiencias'),
-
-            Menu::make('Experiencia 1')
-                ->icon('bs.box')
-                ->route('platform.three.room'),
-
-            /* Menu::make('Documentation')
-                ->title('Docs')
-                ->icon('bs.box-arrow-up-right')
-                ->url('https://orchid.software/en/docs')
-                ->target('_blank'),
-
-            Menu::make('Changelog')
-                ->icon('bs.box-arrow-up-right')
-                ->url('https://github.com/orchidsoftware/platform/blob/master/CHANGELOG.md')
-                ->target('_blank')
-                ->badge(fn () => Dashboard::version(), Color::DARK), */
+            Menu::make('TQA Automatización')
+                ->icon('bs.check2-circle')
+                ->route('platform.tqa')
+                ->permission('platform.testing'),
         ];
     }
 
@@ -136,15 +114,16 @@ class PlatformProvider extends OrchidServiceProvider
     public function permissions(): array
     {
         return [
-            ItemPermission::group(__('System'))
-                ->addPermission('platform.systems.roles', __('Roles'))
-                ->addPermission('platform.systems.users', __('Users')),
-            ItemPermission::group('Auditoría')
+            ItemPermission::group('Sistema')
+                ->addPermission('platform.systems.roles', 'Gestión de Roles')
+                ->addPermission('platform.systems.users', 'Gestión de Usuarios'),
+            ItemPermission::group('Monitoreo')
                 ->addPermission('platform.audit', 'Ver registros de auditoría'),
             ItemPermission::group('Ventas')
                 ->addPermission('platform.ventas.report', 'Ver reporte de ganancias (3D)'),
-            ItemPermission::group('Backups')
-                ->addPermission('platform.backup', 'Gestionar backups'),
+            ItemPermission::group('Mantenimiento')
+                ->addPermission('platform.backup', 'Gestionar backups')
+                ->addPermission('platform.testing', 'TQA Automatización'),
         ];
     }
 }

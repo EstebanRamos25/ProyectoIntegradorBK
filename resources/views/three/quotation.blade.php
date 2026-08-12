@@ -252,6 +252,9 @@
                                     <br>
                                     <strong>Piezas estimadas:</strong>
                                     {{ data_get($quotation, 'walls.estimated_units') !== null ? number_format((int) $quotation['walls']['estimated_units'], 0, ',', '.') : '—' }}
+                                    <br>
+                                    <strong>Cajas requeridas:</strong>
+                                    {{ data_get($quotation, 'walls.boxes_required') !== null ? number_format((int) $quotation['walls']['boxes_required'], 0, ',', '.') : '—' }}
                                 </td>
                             </tr>
                         @endif
@@ -270,50 +273,66 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Precio estimado por m²</td>
+                            <td>Precio estimado por m² (Piso)</td>
                             <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['unit_price_m2'], 0, ',', '.') }}</td>
                         </tr>
                         <tr>
-                            <td>Precio estimado por pieza</td>
+                            <td>Precio estimado por pieza (Piso)</td>
                             <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['estimated_unit_price'], 0, ',', '.') }}</td>
                         </tr>
                         <tr>
-                            <td>Cantidad estimada</td>
+                            <td>Cantidad estimada (Piso)</td>
                             <td class="money">{{ number_format($quotation['summary']['estimated_units'], 0, ',', '.') }} piezas</td>
                         </tr>
                         <tr>
-                            <td>Subtotal estimado material</td>
+                            <td>Subtotal estimado material (Piso)</td>
                             <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['subtotal'] ?? $quotation['summary']['estimated_total'], 0, ',', '.') }}</td>
                         </tr>
                         @if(!empty($quotation['promotion']))
                             <tr>
-                                <td>Promoción aplicada</td>
+                                <td>Promoción aplicada (Piso)</td>
                                 <td class="money">
                                     {{ $quotation['promotion']['name'] }}
                                     ({{ number_format((float) $quotation['promotion']['discount_pct'], 2, ',', '.') }}%)
                                 </td>
                             </tr>
                             <tr>
-                                <td>Descuento</td>
+                                <td>Descuento (Piso)</td>
                                 <td class="money">- {{ $quotation['currency_symbol'] }} {{ number_format((float) ($quotation['summary']['discount_amount'] ?? 0), 0, ',', '.') }}</td>
                             </tr>
                             <tr class="total-row">
-                                <td>Total con descuento</td>
+                                <td>Total con descuento (Piso)</td>
                                 <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format((float) ($quotation['summary']['total_after_discount'] ?? $quotation['summary']['estimated_total']), 0, ',', '.') }}</td>
                             </tr>
                         @else
                             <tr class="total-row">
-                                <td>Total estimado material</td>
+                                <td>Total estimado material (Piso)</td>
                                 <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['summary']['estimated_total'], 0, ',', '.') }}</td>
+                            </tr>
+                        @endif
+                        
+                        @if(!empty($quotation['walls']))
+                            <tr>
+                                <td colspan="2" style="padding-top: 15px; border-bottom: none;"><strong style="font-size: 12px;">Paredes</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Precio estimado por m² (Paredes)</td>
+                                <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['walls']['unit_price_m2'], 0, ',', '.') }}</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>Total estimado material (Paredes)</td>
+                                <td class="money">{{ $quotation['currency_symbol'] }} {{ number_format($quotation['walls']['estimated_total'], 0, ',', '.') }}</td>
+                            </tr>
+                            
+                            <tr class="total-row" style="background-color: #f1f5f9;">
+                                <td style="padding-top: 15px;">TOTAL GENERAL (Piso + Paredes)</td>
+                                <td class="money" style="padding-top: 15px;">{{ $quotation['currency_symbol'] }} {{ number_format(($quotation['summary']['total_after_discount'] ?? $quotation['summary']['estimated_total']) + $quotation['walls']['estimated_total'], 0, ',', '.') }}</td>
                             </tr>
                         @endif
                     </tbody>
                 </table>
                 <div class="note">
-                    Estimación referencial basada en la cobertura del piso completo. No incluye desperdicio por cortes, instalación, transporte ni accesorios adicionales.
-                    @if(!empty($quotation['walls']))
-                        La cobertura de paredes se muestra solo como referencia (sin cálculo de precio).
-                    @endif
+                    Estimación referencial basada en la cobertura del piso y paredes. No incluye desperdicio por cortes, instalación, transporte ni accesorios adicionales.
                     @if($quotation['prices_are_reference'])
                     @endif
                 </div>

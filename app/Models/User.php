@@ -8,10 +8,14 @@ use Orchid\Filters\Types\WhereDateStartEnd;
 use Orchid\Platform\Models\User as Authenticatable;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
+use Orchid\Screen\AsSource;
+use Orchid\Filters\Filterable;
+use Orchid\Attachment\Attachable;
 
 class User extends Authenticatable
 {
-    use LogsActivity;
+    use LogsActivity, AsSource, Filterable, Attachable;
+
     /**
      * The attributes that are mass assignable.
      *
@@ -77,5 +81,15 @@ class User extends Authenticatable
             ->logOnly(['name','email'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
+    }
+
+    public function threeScenes()
+    {
+        return $this->hasMany(ThreeScene::class, 'user_id');
+    }
+
+    public function threeQuotes()
+    {
+        return $this->hasMany(ThreeQuote::class, 'user_id');
     }
 }

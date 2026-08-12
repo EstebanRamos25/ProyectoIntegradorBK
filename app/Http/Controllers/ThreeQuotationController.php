@@ -59,7 +59,7 @@ class ThreeQuotationController extends Controller
         $pieceAreaM2 = round(($piece['width_cm'] / 100) * ($piece['depth_cm'] / 100), 4);
         $estimatedUnits = max(1, (int) ceil($floorAreaM2 / max($pieceAreaM2, 0.0001)));
 
-        // Paredes: cobertura (solo referencia, sin precio).
+        // Paredes: cálculo real de precio y stock
         $wallsSection = null;
         $wallsMaterialId = data_get($validated, 'walls.material_id');
         if ($wallsMaterialId) {
@@ -76,11 +76,58 @@ class ThreeQuotationController extends Controller
             }
 
             $wallProducto = Producto::query()->with(['categoria'])->find($wallsMaterialId);
+            $wallUnitPriceM2 = $wallProducto ? (float) ($wallProducto->Precio ?? 0) : 0.0;
+            $wallEstimatedTotal = round($wallAreaM2 * $wallUnitPriceM2, 0);
+
+            $wallM2PerBox = $wallProducto ? (float) ($wallProducto->M2_Por_Caja ?? 0) : 0.0;
+            $wallBoxesRequired = null;
+            if ($wallM2PerBox > 0) {
+                $wallBoxesRequired = max(1, (int) ceil($wallAreaM2 / $wallM2PerBox));
+            }
+
+            $wallInventoryCheck = null;
+            if ($wallProducto && $wallBoxesRequired !== null) {
+                $wallLotsAgg = Inventario::query()
+                    ->where('producto_id', $wallProducto->id)
+                    ->selectRaw('Codigo_Lote as lot_code, SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)) as boxes')
+                    ->groupBy('lot_code')
+                    ->get()
+                    ->map(function ($row): array {
+                        return [
+                            'lot_code' => $row->lot_code !== null ? (string) $row->lot_code : null,
+                            'boxes_available' => (int) ($row->boxes ?? 0),
+                        ];
+                    })
+                    ->filter(fn (array $r) => (int) $r['boxes_available'] > 0)
+                    ->values();
+
+                $wallBoxesAvailableTotal = (int) $wallLotsAgg->sum('boxes_available');
+                $wallBestLot = $wallLotsAgg->sortByDesc('boxes_available')->first();
+                $wallBestLotBoxes = $wallBestLot ? (int) $wallBestLot['boxes_available'] : 0;
+                $wallBestLotCode = $wallBestLot['lot_code'] ?? null;
+
+                $wallInventoryCheck = [
+                    'product_id' => (int) $wallProducto->id,
+                    'boxes_required' => $wallBoxesRequired,
+                    'boxes_available_total' => $wallBoxesAvailableTotal,
+                    'missing_boxes' => max(0, $wallBoxesRequired - $wallBoxesAvailableTotal),
+                    'can_fulfill_total' => $wallBoxesAvailableTotal >= $wallBoxesRequired,
+                    'can_fulfill_single_lot' => $wallBestLotBoxes >= $wallBoxesRequired,
+                    'best_lot_code' => $wallBestLotCode,
+                    'best_lot_boxes_available' => $wallBestLotBoxes,
+                    'lots' => $wallLotsAgg,
+                ];
+            }
 
             $wallsSection = [
                 'wall_area_m2' => $wallAreaM2,
                 'piece_area_m2' => $wallPieceAreaM2,
                 'estimated_units' => $wallEstimatedUnits,
+                'unit_price_m2' => $wallUnitPriceM2,
+                'estimated_total' => $wallEstimatedTotal,
+                'boxes_required' => $wallBoxesRequired,
+                'm2_per_box' => $wallM2PerBox > 0 ? $wallM2PerBox : null,
+                'inventory_check' => $wallInventoryCheck,
                 'piece' => ($wallPieceWidthCm > 0 && $wallPieceDepthCm > 0) ? [
                     'kind' => (string) (data_get($validated, 'walls.piece.kind') ?? ''),
                     'width_cm' => $wallPieceWidthCm,
@@ -91,6 +138,8 @@ class ThreeQuotationController extends Controller
                     'name' => (string) ($wallProducto->Nombre ?? ''),
                     'brand' => (string) ($wallProducto->Marca ?? ''),
                     'model' => (string) ($wallProducto->Modelo ?? ''),
+                    'unit_sale' => (string) ($wallProducto->Unidad_Venta ?: 'caja'),
+                    'pieces_per_box' => $wallProducto->Piezas_Por_Caja !== null ? (int) $wallProducto->Piezas_Por_Caja : null,
                     'category' => [
                         'id' => (int) ($wallProducto->categoria_id ?? 0),
                         'name' => (string) (optional($wallProducto->categoria)->Nombre ?? ''),
@@ -241,7 +290,9 @@ class ThreeQuotationController extends Controller
             $quote->producto_id = $producto?->id;
             $quote->boxes_required = $boxesRequired;
             $quote->area_m2 = $floorAreaM2;
-            $quote->total = (float) $quotation['summary']['total_after_discount'];
+            
+            $wallTotal = isset($quotation['walls']['estimated_total']) ? (float) $quotation['walls']['estimated_total'] : 0.0;
+            $quote->total = (float) $quotation['summary']['total_after_discount'] + $wallTotal;
             $quote->save();
         }
 
