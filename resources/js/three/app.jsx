@@ -26,6 +26,7 @@ import { Floor } from './components/Floor'
 import { Controls } from './components/Controls'
 import { RendererSetup, PostFX } from './components/PostFX'
 import { CoverPreview, WallPiecePreview, WallCoverPreview } from './components/CoverPreviews'
+import { RightSidebar } from './components/RightSidebar'
 import { DynamicSpot } from './components/DynamicSpot'
 import { SunLight, getEnvironmentPreset } from './components/SunLight'
 import { WindowLight } from './components/WindowLight'
@@ -61,10 +62,6 @@ function Demo() {
   const [selectedWallMaterialId, setSelectedWallMaterialId] = useState(null)
   const [pieces, setPieces] = useState([])
   const [wallPieces, setWallPieces] = useState([])
-  const [coverage, setCoverage] = useState({ canCompute: false, computed: false })
-  const [coverEnabled, setCoverEnabled] = useState(false)
-  const [wallCoverageState, setWallCoverageState] = useState({ canCompute: false, computed: false })
-  const [wallCoverEnabled, setWallCoverEnabled] = useState(false)
   const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
   const [roomShape, setRoomShape] = useState('rectangular')
   const [windows, setWindows] = useState([])
@@ -241,24 +238,63 @@ function Demo() {
   }, [])
 
   const selectedMaterial = useMemo(
-    () => materials.find((m) => Number(m.id) === Number(selectedMaterialId)) ?? null,
+    () => materials?.find((m) => String(m.id) === String(selectedMaterialId)) ?? null,
     [materials, selectedMaterialId]
   )
-
   const selectedWallMaterial = useMemo(
-    () => materials.find((m) => Number(m.id) === Number(selectedWallMaterialId)) ?? null,
+    () => materials?.find((m) => String(m.id) === String(selectedWallMaterialId)) ?? null,
     [materials, selectedWallMaterialId]
   )
 
-  const handleSelectMaterial = useCallback((next) => {
-    setSelectedMaterialId(next)
-    if (next) trackEvent('material_select', { productId: next, meta: { surface: 'floor' } })
-  }, [trackEvent])
+  const [previewFloorMaterial, setPreviewFloorMaterial] = useState(null)
+  const [previewWallMaterial, setPreviewWallMaterial] = useState(null)
 
-  const handleSelectWallMaterial = useCallback((next) => {
-    setSelectedWallMaterialId(next)
-    if (next) trackEvent('wall_material_select', { productId: next, meta: { surface: 'walls', wall: activeWallKey } })
-  }, [trackEvent, activeWallKey])
+  const handleSelectMaterial = useCallback((id) => {
+    setSelectedMaterialId(id)
+    const mat = materials?.find((m) => String(m.id) === String(id)) ?? null
+    setPreviewFloorMaterial(mat)
+    setActiveSurface('floor')
+  }, [materials])
+
+  const handleSelectWallMaterial = useCallback((id) => {
+    setSelectedWallMaterialId(id)
+    const mat = materials?.find((m) => String(m.id) === String(id)) ?? null
+    setPreviewWallMaterial(mat)
+    setActiveSurface('walls')
+  }, [materials])
+
+  const floorPiece = useMemo(() => pieces[0] ?? null, [pieces])
+  const wallPiece = useMemo(() => wallPieces[0] ?? null, [wallPieces])
+
+  const activeFloorPiece = useMemo(() => {
+    if (previewFloorMaterial) {
+      return {
+        id: 'preview-floor',
+        material: previewFloorMaterial,
+        textureUrl: previewFloorMaterial.image_url,
+        roughness: previewFloorMaterial.kind === 'plank' ? 0.75 : 0.65,
+        metalness: 0.0,
+      }
+    }
+    return floorPiece
+  }, [previewFloorMaterial, floorPiece])
+
+  const activeWallPiece = useMemo(() => {
+    if (previewWallMaterial) {
+      const wCm = Number(previewWallMaterial.piece_dimensions_cm?.width || 0)
+      const dCm = Number(previewWallMaterial.piece_dimensions_cm?.depth || 0)
+      return {
+        id: 'preview-wall',
+        material: previewWallMaterial,
+        width_cm: wCm,
+        depth_cm: dCm,
+        textureUrl: previewWallMaterial.image_url,
+        roughness: previewWallMaterial.kind === 'plank' ? 0.75 : 0.65,
+        metalness: 0.0,
+      }
+    }
+    return wallPiece
+  }, [previewWallMaterial, wallPiece])
 
   const handleUseRecommendation = useCallback((productId) => {
     if (!productId) return
@@ -270,15 +306,13 @@ function Demo() {
     trackEvent('recommendation_click', { productId, meta: { surface: activeSurface, wall: activeWallKey } })
   }, [activeSurface, activeWallKey, trackEvent])
 
-  const wallPiece = useMemo(() => wallPieces[0] ?? null, [wallPieces])
-
   const wallCoverageData = useMemo(() => {
-    if (!wallPiece) return { canCompute: false, computed: false }
+    if (!activeWallPiece) return { canCompute: false, computed: false }
     const wallAreaM2 = 2 * (roomSize.width + roomSize.depth) * roomSize.height
     if (!Number.isFinite(wallAreaM2) || wallAreaM2 <= 0) return { canCompute: false, computed: false }
 
-    const wCm = Number(wallPiece.width_cm || 0)
-    const dCm = Number(wallPiece.depth_cm || 0)
+    const wCm = Number(activeWallPiece.width_cm || 0)
+    const dCm = Number(activeWallPiece.depth_cm || 0)
     if (!Number.isFinite(wCm) || !Number.isFinite(dCm) || wCm <= 0 || dCm <= 0) {
       return { canCompute: false, computed: false }
     }
@@ -295,7 +329,7 @@ function Demo() {
       pieceCmX: wCm,
       pieceCmZ: dCm,
     }
-  }, [wallPiece, roomSize])
+  }, [activeWallPiece, roomSize])
 
   const buildScenePayload = useCallback(() => {
     return {
@@ -306,13 +340,13 @@ function Demo() {
       roomSizeCm,
       selectedMaterialId,
       selectedWallMaterialId,
-      coverEnabled,
+
       wall: wallPiece ? {
         material_id: wallPiece?.material?.id ?? null,
         width_cm: wallPiece.width_cm,
         depth_cm: wallPiece.depth_cm,
         activeWallKey,
-        coverEnabled: wallCoverEnabled,
+
       } : null,
       pieces: pieces.map((p) => ({
         kind: p.kind,
@@ -324,7 +358,7 @@ function Demo() {
         lockSizeXZ: !!p.lockSizeXZ,
       })),
     }
-  }, [floor, roomShape, windows, roomSizeCm, selectedMaterialId, selectedWallMaterialId, coverEnabled, pieces, wallPiece, activeWallKey, wallCoverEnabled])
+  }, [floor, roomShape, windows, roomSizeCm, selectedMaterialId, selectedWallMaterialId, pieces, wallPiece, activeWallKey])
 
   const resetSceneState = useCallback(() => {
     setSelectedSceneId(null)
@@ -334,10 +368,7 @@ function Demo() {
     setWindows([])
     setRoomShape('rectangular')
     setSelected(null)
-    setCoverage({ canCompute: false, computed: false })
-    setCoverEnabled(false)
-    setWallCoverageState({ canCompute: false, computed: false })
-    setWallCoverEnabled(false)
+
     window.localStorage.removeItem('three.lastSceneId')
   }, [])
 
@@ -382,14 +413,14 @@ function Demo() {
       setSelectedWallMaterialId(Number(sceneData.selectedWallMaterialId))
     }
 
-    setCoverEnabled(!!sceneData.coverEnabled)
+
 
     const wallData = sceneData.wall && typeof sceneData.wall === 'object' ? sceneData.wall : null
     if (wallData) {
       if (wallData.activeWallKey) {
         setActiveWallKey(String(wallData.activeWallKey))
       }
-      setWallCoverEnabled(!!wallData.coverEnabled)
+
 
       const wallMaterial = materials.find((m) => Number(m.id) === Number(wallData.material_id)) ?? selectedWallMaterial
       const wCm = Number(wallData.width_cm || 0)
@@ -413,15 +444,12 @@ function Demo() {
       }
     } else {
       setWallPieces([])
-      setWallCoverEnabled(false)
-      setWallCoverageState({ canCompute: false, computed: false })
     }
 
     const nextPieces = Array.isArray(sceneData.pieces) ? sceneData.pieces : []
     if (!nextPieces.length) {
       setPieces([])
       setSelected(null)
-      setCoverage({ canCompute: false, computed: false })
       return
     }
 
@@ -445,7 +473,6 @@ function Demo() {
     }
     setPieces([piece])
     setSelected(null)
-    setCoverage({ canCompute: false, computed: false })
   }, [materials, selectedMaterial, selectedWallMaterial, roomLimits.y])
 
   // Si se seleccionó un escenario antes de cargar materiales, diferimos la hidratación.
@@ -632,7 +659,7 @@ function Demo() {
     return pieces.find((p) => p.id === selectedPieceId) ?? null
   }, [pieces, selectedPieceId])
 
-  const quotePiece = useMemo(() => selectedPiece ?? pieces[0] ?? null, [selectedPiece, pieces])
+  const quotePiece = useMemo(() => activeFloorPiece, [activeFloorPiece])
 
   const hasValidPieceDims = useCallback((material) => {
     const dims = material?.piece_dimensions_cm
@@ -697,7 +724,7 @@ function Demo() {
   }, [quotePiece, selectedMaterial, roomSizeCm, inventoryLive])
 
   const quoteProductId = quotePiece?.material?.id ?? null
-  const wallProductId = wallPiece?.material?.id ?? null
+  const wallProductId = activeWallPiece?.material?.id ?? null
 
   const liveInventoryProductIds = useMemo(() => {
     const ids = new Set()
@@ -892,10 +919,10 @@ function Demo() {
   }, [quotePiece, metersToCm])
 
   const coverageData = useMemo(() => {
-    if (!selectedPiece || !selectedSizeCm) return { canCompute: false, computed: false }
+    if (!quotePiece || !quoteSizeCm) return { canCompute: false, computed: false }
     const pieceM = {
-      x: selectedSizeCm.x / 100,
-      z: selectedSizeCm.z / 100,
+      x: quoteSizeCm.x / 100,
+      z: quoteSizeCm.z / 100,
     }
     const pieceAreaM2 = pieceM.x * pieceM.z
     const floorAreaM2 = roomSize.width * roomSize.depth
@@ -905,22 +932,15 @@ function Demo() {
     return {
       canCompute: true,
       computed: true,
-      pieceCmX: selectedSizeCm.x,
-      pieceCmZ: selectedSizeCm.z,
+      pieceCmX: quoteSizeCm.x,
+      pieceCmZ: quoteSizeCm.z,
       pieceAreaM2,
       floorAreaM2,
       count,
     }
-  }, [selectedPiece, selectedSizeCm, roomSize])
+  }, [quotePiece, quoteSizeCm, roomSize])
 
-  const handleCoverCompute = useCallback(() => {
-    setCoverage(coverageData)
-    setCoverEnabled(true)
-  }, [coverageData])
 
-  const toggleCover = useCallback(() => {
-    setCoverEnabled((v) => !v)
-  }, [])
 
   const updateSelectedSizeCm = useCallback(
     (axis, cmValue) => {
@@ -1019,13 +1039,8 @@ function Demo() {
       return
     }
     if (hasPiece) {
-      const current = pieces[0]
-      const currentLabel = current?.material?.name ? current.material.name : 'actual'
-      const nextLabel = selectedMaterial.name
-      const ok = await confirm(
-        `Ya existe una pieza (${currentLabel}).\n\nSi continúas, se borrará y se agregará: ${nextLabel}.\n\n¿Deseas reemplazarla?`
-      )
-      if (!ok) return
+      // Auto-replace without prompt for smoother UX
+      // We just overwrite
     }
     const id = nextId.current++
 
@@ -1061,13 +1076,7 @@ function Demo() {
   const addOneWallPiece = useCallback(async () => {
     if (!selectedWallMaterial) return
     if (hasWallPiece) {
-      const current = wallPieces[0]
-      const currentLabel = current?.material?.name ? current.material.name : 'actual'
-      const nextLabel = selectedWallMaterial.name
-      const ok = await confirm(
-        `Ya existe una pieza de pared (${currentLabel}).\n\nSi continúas, se borrará y se agregará: ${nextLabel}.\n\n¿Deseas reemplazarla?`
-      )
-      if (!ok) return
+      // Auto-replace without prompt
     }
 
     if (!hasValidPieceDims(selectedWallMaterial)) {
@@ -1094,23 +1103,10 @@ function Demo() {
     }
 
     setWallPieces([piece])
-    setWallCoverageState({ canCompute: false, computed: false })
-    setWallCoverEnabled(false)
     setSelected(null)
   }, [selectedWallMaterial, hasWallPiece, wallPieces, activeWallKey, hasValidPieceDims])
 
-  const handleCoverWallsCompute = useCallback(() => {
-    if (!wallCoverageData?.canCompute) {
-      toast('Agrega una pieza en pared antes de calcular cobertura.', { type: 'warning' })
-      return
-    }
-    setWallCoverageState(wallCoverageData)
-    setWallCoverEnabled(true)
-  }, [wallCoverageData])
 
-  const toggleWallCover = useCallback(() => {
-    setWallCoverEnabled((v) => !v)
-  }, [])
 
   const handleGenerateQuote = useCallback(async () => {
     if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
@@ -1161,12 +1157,12 @@ function Demo() {
           floor_kind: floor,
           snapshot_top_png_data_url: snapshotTop,
           walls: {
-            material_id: wallPiece?.material?.id ?? null,
-            piece: wallPiece
+            material_id: activeWallPiece?.material?.id ?? null,
+            piece: activeWallPiece
               ? {
-                  kind: wallPiece.kind,
-                  width_cm: wallPiece.width_cm,
-                  depth_cm: wallPiece.depth_cm,
+                  kind: activeWallPiece.kind,
+                  width_cm: activeWallPiece.width_cm,
+                  depth_cm: activeWallPiece.depth_cm,
                 }
               : null,
           },
@@ -1208,7 +1204,7 @@ function Demo() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, wallPiece, sceneName, selectedSceneId, trackEvent, saveScene])
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, activeWallPiece, sceneName, selectedSceneId, trackEvent, saveScene])
 
   useEffect(() => {
     if (selected && isMovable(selected) && selectedPiece) {
@@ -1368,6 +1364,16 @@ function Demo() {
     animateCameraTo(obj)
   }, [clearSelectionVisual, animateCameraTo, inferSurfaceFromName, inferWallKeyFromName])
 
+  const handleSelectWall = useCallback((e) => {
+    e.stopPropagation()
+    const name = e.eventObject?.name
+    if (name) {
+      const key = inferWallKeyFromName(name)
+      if (key) setActiveWallKey(key)
+    }
+    setActiveSurface('walls')
+  }, [inferWallKeyFromName])
+
   return (
     <>
       <Controls
@@ -1388,13 +1394,11 @@ function Demo() {
         recommendationsLoading={recommendationsLoading}
         recommendationsError={recommendationsError}
         onUseRecommendation={handleUseRecommendation}
-        wallCoverage={{ ...wallCoverageState, ...wallCoverageData, canCompute: wallCoverageData.canCompute, computed: wallCoverageState.computed }}
+        wallCoverage={wallCoverageData}
         onAddWalls={addOneWallPiece}
         canAddWalls={canAddWalls}
         addLabelWalls={addLabelWalls}
-        onCoverWalls={handleCoverWallsCompute}
-        onToggleCoverWalls={toggleWallCover}
-        wallCoverEnabled={wallCoverEnabled}
+
         onAdd={addOnePiece}
         canAdd={canAdd}
         addLabel={addLabel}
@@ -1407,10 +1411,7 @@ function Demo() {
         onCreateNewScene={createNewScene}
         onSaveScene={saveScene}
         onLoadScene={loadSceneById}
-        coverage={{ ...coverage, ...coverageData, canCompute: coverageData.canCompute, computed: coverage.computed }}
-        onCover={handleCoverCompute}
-        onToggleCover={toggleCover}
-        coverEnabled={coverEnabled}
+        coverage={coverageData}
         roomSizeCm={roomSizeCm}
         onRoomSizeChange={updateRoomSize}
         roomShape={roomShape}
@@ -1437,6 +1438,54 @@ function Demo() {
         dofOn={dofOn}
         onDofToggle={() => setDofOn(v => !v)}
       />
+
+      <RightSidebar 
+        activeSurface={activeSurface}
+        previewMaterial={activeSurface === 'walls' ? previewWallMaterial : previewFloorMaterial}
+        installedFloor={floorPiece?.material}
+        installedWall={wallPiece?.material}
+        coverage={activeSurface === 'walls' ? wallCoverageData : coverageData}
+        coverSolid={coverSolid}
+        onToggleCoverSolid={() => setCoverSolid(v => !v)}
+        timeOfDay={timeOfDay}
+        lightIntensity={lightIntensity}
+        onApply={() => {
+          if (activeSurface === 'walls') {
+            if (wallPieces.length > 0) {
+              if (!window.confirm('¿Deseas reemplazar el material instalado en las paredes?')) return
+            }
+            addOneWallPiece()
+            setPreviewWallMaterial(null)
+          } else {
+            if (pieces.length > 0) {
+              if (!window.confirm('¿Deseas reemplazar el material instalado en el piso?')) return
+            }
+            addOnePiece()
+            setPreviewFloorMaterial(null)
+          }
+        }}
+        onCancelPreview={() => {
+          if (activeSurface === 'walls') {
+            setPreviewWallMaterial(null)
+            setSelectedWallMaterialId(wallPieces[0]?.material?.id ?? null)
+          } else {
+            setPreviewFloorMaterial(null)
+            setSelectedMaterialId(pieces[0]?.material?.id ?? null)
+          }
+        }}
+        onRemove={(surface) => {
+          if (surface === 'walls') {
+            setWallPieces([])
+            setPreviewWallMaterial(null)
+            setSelectedWallMaterialId(null)
+          } else {
+            setPieces([])
+            setPreviewFloorMaterial(null)
+            setSelectedMaterialId(null)
+          }
+        }}
+      />
+
       {selected && (
         <div style={{position:'fixed', top:62, right:12, zIndex:11, background:'rgba(0,0,0,.75)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif', width:240}}>
           <div style={{fontWeight:'600', marginBottom:8}}>Objeto seleccionado</div>
@@ -1490,32 +1539,43 @@ function Demo() {
         {/* Escenario y Piso */}
         <Floor kind={floor} width={roomSize.width} depth={roomSize.depth} roomShape={roomShape} onPointerDown={handleSelect} name="Piso" />
 
-        {/* Preview de cobertura (instanced, liviano) */}
+        {/* Preview de cobertura (instanced, permanente) */}
         <CoverPreview
-          enabled={coverEnabled && coverage?.computed}
-          piece={pieces[0]}
+          enabled={!!activeFloorPiece && coverageData?.computed}
+          piece={activeFloorPiece}
           pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
           roomSize={roomSize}
-          textureUrl={pieces[0]?.textureUrl}
+          textureUrl={activeFloorPiece?.textureUrl}
           solid={coverSolid}
         />
 
-        {/* Preview: pieza centrada en la pared activa */}
-        <WallPiecePreview
-          piece={wallPiece}
+        {/* Muros */}
+        <Walls
           roomSize={roomSize}
           wallThickness={wallThickness}
-          activeWallKey={activeWallKey}
-          onPointerDown={handleSelect}
+          roomShape={roomShape}
+          windows={windows}
+          onPointerDown={handleSelectWall}
         />
 
-        {/* Preview de cobertura en paredes (instanced) */}
+        {/* Preview: pieza centrada en la pared activa (permanente si no hay material aplicado o si hay preview) */}
+        {(!wallPieces.length || previewWallMaterial) && (
+          <WallPiecePreview
+            piece={activeWallPiece}
+            roomSize={roomSize}
+            wallThickness={wallThickness}
+            activeWallKey={activeWallKey}
+            onPointerDown={handleSelect}
+          />
+        )}
+
+        {/* Preview de cobertura en paredes (instanced, permanente) */}
         <WallCoverPreview
-          enabled={wallCoverEnabled && wallCoverageState?.computed}
-          piece={wallPiece}
+          enabled={!!activeWallPiece && wallCoverageData?.computed}
+          piece={activeWallPiece}
           roomSize={roomSize}
           wallThickness={wallThickness}
-          textureUrl={wallPiece?.textureUrl}
+          textureUrl={activeWallPiece?.textureUrl}
           solid={coverSolid}
         />
 
