@@ -128,7 +128,7 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
                'quotesByScene' => $quotesByScene,
                'user' => $user,
           ]);
-     })->name('three.demo');
+     })->name('three.menu');
 
      // Editor 3D
      Route::get('/3d/editor', function() use ($disableViteHotIfNotReachable) {

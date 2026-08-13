@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment, SoftShadows, PerformanceMonitor, useTexture } from '@react-three/drei'
-import { EffectComposer, Bloom, SSAO, ToneMapping, Vignette } from '@react-three/postprocessing'
-import { DepthOfField, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
+// Effects re-exported from components/PostFX.jsx
 import {
   ACESFilmicToneMapping,
   SRGBColorSpace,
@@ -29,6 +28,7 @@ import { RendererSetup, PostFX } from './components/PostFX'
 import { CoverPreview, WallPiecePreview, WallCoverPreview } from './components/CoverPreviews'
 import { DynamicSpot } from './components/DynamicSpot'
 import { useRecommendations } from './hooks/useRecommendations'
+import { ToastProvider, useToast } from './components/Toast'
 
 const WHITE_TEX_DATA_URL =
   'data:image/svg+xml;utf8,' +
@@ -38,6 +38,7 @@ const WHITE_TEX_DATA_URL =
 
 // Componentes extraidos a components/
 function Demo() {
+  const { toast, confirm } = useToast()
   const [activeSurface, setActiveSurface] = useState('floor')
   const [activeWallKey, setActiveWallKey] = useState('north')
   const [floor, setFloor] = useState('wood')
@@ -433,7 +434,7 @@ function Demo() {
       }
     } catch (err) {
       console.error(err)
-      window.alert('No se pudo cargar el escenario.')
+      toast('No se pudo cargar el escenario.', { type: 'error' })
     }
   }, [materialsLoading, hydrateScene])
 
@@ -469,21 +470,21 @@ function Demo() {
     loadSceneById(lastId)
   }, [scenesLoading, scenesError, scenes, loadSceneById])
 
-  const createNewScene = useCallback(() => {
-    const ok = window.confirm('Esto creará un escenario nuevo y limpiará la escena actual. ¿Continuar?')
+  const createNewScene = useCallback(async () => {
+    const ok = await confirm('Esto creará un escenario nuevo y limpiará la escena actual. ¿Continuar?')
     if (!ok) return
     resetSceneState()
   }, [resetSceneState])
 
   const saveScene = useCallback(async () => {
     if (scenesError) {
-      window.alert('Inicia sesión para guardar escenarios.')
+      toast('Inicia sesión para guardar escenarios.', { type: 'warning' })
       return null
     }
 
     const name = String(sceneName || '').trim()
     if (!name) {
-      window.alert('Escribe un nombre para el escenario antes de guardar.')
+      toast('Escribe un nombre para el escenario antes de guardar.', { type: 'warning' })
       return null
     }
 
@@ -506,7 +507,7 @@ function Demo() {
       })
 
       if (resp.status === 401 || resp.status === 419) {
-        window.alert('Inicia sesión para guardar escenarios.')
+        toast('Inicia sesión para guardar escenarios.', { type: 'warning' })
         return null
       }
 
@@ -535,11 +536,11 @@ function Demo() {
         setScenes(Array.isArray(listData?.items) ? listData.items : [])
       }
 
-      window.alert('Escenario guardado.')
+      toast('Escenario guardado correctamente.', { type: 'success' })
       return savedId
     } catch (err) {
       console.error(err)
-      window.alert(String(err?.message || 'No se pudo guardar el escenario.'))
+      toast(String(err?.message || 'No se pudo guardar el escenario.'), { type: 'error' })
       return null
     }
   }, [sceneName, selectedSceneId, buildScenePayload, scenesError])
@@ -954,17 +955,17 @@ function Demo() {
   const canAdd = !materialsLoading && !materialsError && !!selectedMaterial && hasValidPieceDims(selectedMaterial)
   const addLabel = hasPiece ? 'Reemplazar pieza' : 'Agregar pieza'
 
-  const addOnePiece = useCallback(() => {
+  const addOnePiece = useCallback(async () => {
     if (!selectedMaterial) return
     if (!hasValidPieceDims(selectedMaterial)) {
-      window.alert('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.')
+      toast('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.', { type: 'warning', duration: 5000 })
       return
     }
     if (hasPiece) {
       const current = pieces[0]
       const currentLabel = current?.material?.name ? current.material.name : 'actual'
       const nextLabel = selectedMaterial.name
-      const ok = window.confirm(
+      const ok = await confirm(
         `Ya existe una pieza (${currentLabel}).\n\nSi continúas, se borrará y se agregará: ${nextLabel}.\n\n¿Deseas reemplazarla?`
       )
       if (!ok) return
@@ -1000,20 +1001,20 @@ function Demo() {
   const canAddWalls = !materialsLoading && !materialsError && !!selectedWallMaterial && hasValidPieceDims(selectedWallMaterial)
   const addLabelWalls = hasWallPiece ? 'Reemplazar pieza' : 'Agregar pieza'
 
-  const addOneWallPiece = useCallback(() => {
+  const addOneWallPiece = useCallback(async () => {
     if (!selectedWallMaterial) return
     if (hasWallPiece) {
       const current = wallPieces[0]
       const currentLabel = current?.material?.name ? current.material.name : 'actual'
       const nextLabel = selectedWallMaterial.name
-      const ok = window.confirm(
+      const ok = await confirm(
         `Ya existe una pieza de pared (${currentLabel}).\n\nSi continúas, se borrará y se agregará: ${nextLabel}.\n\n¿Deseas reemplazarla?`
       )
       if (!ok) return
     }
 
     if (!hasValidPieceDims(selectedWallMaterial)) {
-      window.alert('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.')
+      toast('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.', { type: 'warning', duration: 5000 })
       return
     }
 
@@ -1043,7 +1044,7 @@ function Demo() {
 
   const handleCoverWallsCompute = useCallback(() => {
     if (!wallCoverageData?.canCompute) {
-      window.alert('Agrega una pieza en pared antes de calcular cobertura.')
+      toast('Agrega una pieza en pared antes de calcular cobertura.', { type: 'warning' })
       return
     }
     setWallCoverageState(wallCoverageData)
@@ -1064,7 +1065,7 @@ function Demo() {
     }
 
     if (inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false) {
-      const ok = window.confirm(
+      const ok = await confirm(
         `Stock insuficiente según inventario (en tiempo real).\n\n` +
           `Requiere: ${inventoryStatus.boxesRequired} cajas\n` +
           `Disponibles: ${inventoryStatus.boxesAvailableTotal} cajas\n` +
@@ -1146,7 +1147,7 @@ function Demo() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1500)
     } catch (error) {
       console.error(error)
-      window.alert('No se pudo generar la cotización PDF. Revisa la configuración actual e inténtalo de nuevo.')
+      toast('No se pudo generar la cotización PDF. Revisa la configuración actual e inténtalo de nuevo.', { type: 'error', duration: 5500 })
     } finally {
       setQuoteLoading(false)
     }
@@ -1499,7 +1500,11 @@ function Demo() {
   )
 }
 
-createRoot(document.getElementById('r3f-root')).render(<Demo />)
+createRoot(document.getElementById('r3f-root')).render(
+  <ToastProvider>
+    <Demo />
+  </ToastProvider>
+)
 
 // Where do I change things?
 // - Camera/Lights/Controls: resources/js/three/config.js (cameraConfig, lightsConfig, controlsConfig)

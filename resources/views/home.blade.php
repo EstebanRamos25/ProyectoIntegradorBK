@@ -201,7 +201,7 @@
 
                 <div class="mt-8 flex flex-wrap gap-3">
                     <a
-                        href="{{ route('three.demo') }}"
+                        href="{{ route('three.menu') }}"
                         class="rounded-lg px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:shadow-lg"
                         style="background: linear-gradient(135deg, var(--color-wood), var(--color-accent));"
                     >
@@ -325,7 +325,7 @@
                     <h2 class="text-3xl font-semibold" style="color: var(--color-charcoal);">Productos destacados</h2>
                     <p class="mt-2 text-sm" style="color: var(--color-warm-gray);">Productos reales registrados en el sistema, con vista 3D rotatable para una primera impresión más atractiva.</p>
                 </div>
-                <a href="{{ route('three.demo') }}" class="hidden text-sm font-semibold sm:inline-flex" style="color: var(--color-wood);">
+                <a href="{{ route('three.menu') }}" class="hidden text-sm font-semibold sm:inline-flex" style="color: var(--color-wood);">
                     Ver catálogo 3D completo
                 </a>
             </div>
@@ -440,7 +440,7 @@
                     <div class="mb-5 text-sm leading-relaxed" style="color: var(--color-warm-gray);">
                         Explora materiales en un entorno tridimensional interactivo. Visualiza texturas y colores con detalle.
                     </div>
-                    <a href="{{ route('three.demo') }}" class="inline-flex items-center gap-2 text-sm font-semibold transition-all duration-300" style="color: var(--color-accent);">
+                    <a href="{{ route('three.menu') }}" class="inline-flex items-center gap-2 text-sm font-semibold transition-all duration-300" style="color: var(--color-accent);">
                         Abrir visualizador
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

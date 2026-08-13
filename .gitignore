@@ -28,3 +28,5 @@ Homestead.json
 .env.production
 .phpactor.json
 auth.json
+storage/app/three-reco/*.json
+storage/logs/three-reco-train.log

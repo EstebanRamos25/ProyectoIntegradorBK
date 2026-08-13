@@ -8,11 +8,27 @@ use App\Models\Inventario;
 use App\Models\Producto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class ThreeMaterialsController extends Controller
 {
     public function index(): JsonResponse
+    {
+        // Cache el catálogo de materiales por 5 minutos.
+        // Se invalida automáticamente en ProductoResource (observer) si el admin
+        // agrega/edita productos. Evita N+1 queries repetidas al abrir el editor.
+        $items = Cache::remember('three.materials.catalog', 300, function () {
+            return $this->buildCatalog();
+        });
+
+        return response()->json([
+            'items' => $items,
+            'count' => count($items),
+        ]);
+    }
+
+    private function buildCatalog(): array
     {
         $productos = Producto::query()
             ->with(['categoria', 'attachment'])
@@ -126,11 +142,7 @@ class ThreeMaterialsController extends Controller
                 ];
             })
             ->filter()
-            ->values();
-
-        return response()->json([
-            'items' => $items,
-            'count' => $items->count(),
-        ]);
+            ->values()
+            ->all();
     }
 }

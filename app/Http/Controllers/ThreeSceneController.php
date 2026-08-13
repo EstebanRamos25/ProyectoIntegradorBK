@@ -17,6 +17,7 @@ class ThreeSceneController extends Controller
         $items = ThreeScene::query()
             ->where('user_id', $user->id)
             ->orderByDesc('updated_at')
+            ->limit(50)
             ->get(['id', 'name', 'updated_at', 'created_at']);
 
         return response()->json([
@@ -47,6 +48,13 @@ class ThreeSceneController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
+
+        // Límite de seguridad: máximo 50 escenas por usuario.
+        if (ThreeScene::query()->where('user_id', $user->id)->count() >= 50) {
+            return response()->json([
+                'message' => 'Has alcanzado el límite máximo de 50 escenas guardadas. Elimina algunas antes de crear una nueva.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],

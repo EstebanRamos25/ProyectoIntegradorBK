@@ -27,6 +27,7 @@
     },
     "dependencies": {
         "@react-three/postprocessing": "^3.0.4",
-        "postprocessing": "^6.38.1"
+        "postprocessing": "^6.38.1",
+        "sonner": "^2.0.8"
     }
 }

@@ -35,7 +35,7 @@ class ClientAuthController extends Controller
 
         $user = Auth::user();
         $defaultRedirect = ($user && method_exists($user, 'inRole') && $user->inRole('client'))
-            ? route('three.demo')
+            ? route('three.menu')
             : route(config('platform.index'));
 
         return redirect()->intended($defaultRedirect);
@@ -74,7 +74,7 @@ class ClientAuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->route('three.demo');
+        return redirect()->route('three.menu');
     }
 
     public function logout(Request $request)

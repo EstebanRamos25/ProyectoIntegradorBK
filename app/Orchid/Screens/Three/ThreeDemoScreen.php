@@ -16,7 +16,7 @@ class ThreeDemoScreen extends Screen
     public function query(): iterable
     {
         return [
-            'src' => route('three.demo'),
+            'src' => route('three.menu'),
         ];
     }
 

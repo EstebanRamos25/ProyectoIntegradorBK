@@ -14,7 +14,7 @@ class EnsureNotClient
         $user = Auth::user();
 
         if ($user && method_exists($user, 'inRole') && $user->inRole('client')) {
-            return redirect()->route('three.demo');
+            return redirect()->route('three.menu');
         }
 
         return $next($request);
