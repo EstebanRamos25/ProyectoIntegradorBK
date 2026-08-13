@@ -1284,7 +1284,8 @@ const styles = {
   bottomBar: {
     position: 'fixed',
     bottom: 14,
-    right: 14,
+    left: '50%',
+    transform: 'translateX(-50%)',
     zIndex: 90,
     display: 'flex',
     alignItems: 'center',

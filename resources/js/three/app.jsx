@@ -268,9 +268,14 @@ function Demo() {
 
   const activeFloorPiece = useMemo(() => {
     if (previewFloorMaterial) {
+      const dims = previewFloorMaterial.piece_dimensions_cm
+      const wCm = Number(dims?.width || 0)
+      const dCm = Number(dims?.depth || 0)
       return {
         id: 'preview-floor',
         material: previewFloorMaterial,
+        size: [wCm / 100, 0.12, dCm / 100],
+        scaleXZ: { x: 1, z: 1 },
         textureUrl: previewFloorMaterial.image_url,
         roughness: previewFloorMaterial.kind === 'plank' ? 0.75 : 0.65,
         metalness: 0.0,
@@ -1364,15 +1369,6 @@ function Demo() {
     animateCameraTo(obj)
   }, [clearSelectionVisual, animateCameraTo, inferSurfaceFromName, inferWallKeyFromName])
 
-  const handleSelectWall = useCallback((e) => {
-    e.stopPropagation()
-    const name = e.eventObject?.name
-    if (name) {
-      const key = inferWallKeyFromName(name)
-      if (key) setActiveWallKey(key)
-    }
-    setActiveSurface('walls')
-  }, [inferWallKeyFromName])
 
   return (
     <>
@@ -1441,48 +1437,47 @@ function Demo() {
 
       <RightSidebar 
         activeSurface={activeSurface}
-        previewMaterial={activeSurface === 'walls' ? previewWallMaterial : previewFloorMaterial}
+        previewFloor={previewFloorMaterial}
+        previewWall={previewWallMaterial}
         installedFloor={floorPiece?.material}
         installedWall={wallPiece?.material}
-        coverage={activeSurface === 'walls' ? wallCoverageData : coverageData}
+        floorCoverage={coverageData}
+        wallCoverage={wallCoverageData}
         coverSolid={coverSolid}
         onToggleCoverSolid={() => setCoverSolid(v => !v)}
         timeOfDay={timeOfDay}
         lightIntensity={lightIntensity}
-        onApply={() => {
-          if (activeSurface === 'walls') {
-            if (wallPieces.length > 0) {
-              if (!window.confirm('¿Deseas reemplazar el material instalado en las paredes?')) return
-            }
-            addOneWallPiece()
-            setPreviewWallMaterial(null)
-          } else {
-            if (pieces.length > 0) {
-              if (!window.confirm('¿Deseas reemplazar el material instalado en el piso?')) return
-            }
-            addOnePiece()
-            setPreviewFloorMaterial(null)
+        onApplyFloor={() => {
+          if (pieces.length > 0) {
+            if (!window.confirm('¿Deseas reemplazar el material instalado en el piso?')) return
           }
+          addOnePiece()
+          setPreviewFloorMaterial(null)
         }}
-        onCancelPreview={() => {
-          if (activeSurface === 'walls') {
-            setPreviewWallMaterial(null)
-            setSelectedWallMaterialId(wallPieces[0]?.material?.id ?? null)
-          } else {
-            setPreviewFloorMaterial(null)
-            setSelectedMaterialId(pieces[0]?.material?.id ?? null)
+        onApplyWall={() => {
+          if (wallPieces.length > 0) {
+            if (!window.confirm('¿Deseas reemplazar el material instalado en las paredes?')) return
           }
+          addOneWallPiece()
+          setPreviewWallMaterial(null)
         }}
-        onRemove={(surface) => {
-          if (surface === 'walls') {
-            setWallPieces([])
-            setPreviewWallMaterial(null)
-            setSelectedWallMaterialId(null)
-          } else {
-            setPieces([])
-            setPreviewFloorMaterial(null)
-            setSelectedMaterialId(null)
-          }
+        onCancelPreviewFloor={() => {
+          setPreviewFloorMaterial(null)
+          setSelectedMaterialId(pieces[0]?.material?.id ?? null)
+        }}
+        onCancelPreviewWall={() => {
+          setPreviewWallMaterial(null)
+          setSelectedWallMaterialId(wallPieces[0]?.material?.id ?? null)
+        }}
+        onRemoveFloor={() => {
+          setPieces([])
+          setPreviewFloorMaterial(null)
+          setSelectedMaterialId(null)
+        }}
+        onRemoveWall={() => {
+          setWallPieces([])
+          setPreviewWallMaterial(null)
+          setSelectedWallMaterialId(null)
         }}
       />
 
@@ -1549,14 +1544,6 @@ function Demo() {
           solid={coverSolid}
         />
 
-        {/* Muros */}
-        <Walls
-          roomSize={roomSize}
-          wallThickness={wallThickness}
-          roomShape={roomShape}
-          windows={windows}
-          onPointerDown={handleSelectWall}
-        />
 
         {/* Preview: pieza centrada en la pared activa (permanente si no hay material aplicado o si hay preview) */}
         {(!wallPieces.length || previewWallMaterial) && (

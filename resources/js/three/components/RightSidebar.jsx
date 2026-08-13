@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Environment, ContactShadows, useTexture } from '@react-three/drei'
 import { SunLight, getEnvironmentPreset } from './SunLight'
@@ -43,26 +43,29 @@ function MiniViewer({ textureUrl, roughness, metalness, timeOfDay, intensity }) 
  * Muestra el visor 3D, detalles del producto y la calculadora de cobertura.
  */
 export function RightSidebar({
-  activeSurface,
-  previewMaterial,
+  previewFloor,
+  previewWall,
   installedFloor,
   installedWall,
-  coverage,
+  floorCoverage,
+  wallCoverage,
   coverSolid,
   onToggleCoverSolid,
   timeOfDay,
   lightIntensity,
-  onApply,
-  onCancelPreview,
-  onRemove
+  onApplyFloor,
+  onApplyWall,
+  onCancelPreviewFloor,
+  onCancelPreviewWall,
+  onRemoveFloor,
+  onRemoveWall,
+  activeSurface
 }) {
-  const isWall = activeSurface === 'walls'
-  const covData = coverage
-  
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const currencyFormatter = new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' })
 
   // Render a single material block (used for preview and installed items)
-  const renderMaterialBlock = (mat, label, actionButtons, height = 200) => {
+  const renderMaterialBlock = (mat, label, actionButtons, covData, isWallCoverage) => {
     if (!mat) return null
     const price = mat.price_per_m2 ? Number(mat.price_per_m2) : 0
     const roughness = mat.kind === 'plank' ? 0.75 : 0.65
@@ -70,7 +73,7 @@ export function RightSidebar({
     return (
       <div style={styles.blockContainer}>
         <div style={styles.blockLabel}>{label}</div>
-        <div style={{ ...styles.viewerBox, height }}>
+        <div style={{ ...styles.viewerBox, height: 140 }}>
           <Canvas shadows camera={{ position: [2.5, 2, 2.5], fov: 45 }}>
             <Suspense fallback={null}>
               <MiniViewer textureUrl={mat.image_url} roughness={roughness} metalness={0.0} timeOfDay={timeOfDay} intensity={lightIntensity} />
@@ -88,70 +91,91 @@ export function RightSidebar({
               <strong>{mat.piece_dimensions_cm.width}x{mat.piece_dimensions_cm.depth} cm</strong>
             </div>
           )}
+
+          {/* Coverage integrated in the block */}
+          {covData?.computed && (
+            <div style={{ marginTop: 12, padding: 12, background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+              <div style={styles.coverageHeader}>
+                <span>📊 Cobertura</span>
+                {/* Solamente mostramos el botón de grilla si es la superficie activa para no cruzar el estado global */}
+                {((isWallCoverage && activeSurface === 'walls') || (!isWallCoverage && activeSurface === 'floor')) && (
+                  <button onClick={onToggleCoverSolid} style={{...styles.toggleBtn, ...(coverSolid ? styles.toggleBtnSolid : {})}}>
+                    {coverSolid ? '🧱 Sólido' : '🔲 Grilla'}
+                  </button>
+                )}
+              </div>
+              <div style={styles.coverageBox}>
+                <div style={styles.infoRow}><span>Área total:</span><strong>{(isWallCoverage ? covData.wallAreaM2 : covData.floorAreaM2)?.toFixed(2)} m²</strong></div>
+                <div style={styles.infoRow}><span>Área por pieza:</span><strong>{covData.pieceAreaM2?.toFixed(4)} m²</strong></div>
+                <div style={styles.highlightBox}>
+                  <div style={styles.highlightTitle}>Total Piezas Estimadas</div>
+                  <div style={styles.highlightValue}>{isWallCoverage ? covData.estimatedUnits : covData.count} <span style={{fontSize: 14}}>unidades</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {actionButtons && <div style={styles.actionRow}>{actionButtons}</div>}
         </div>
       </div>
     )
   }
 
-  const hasAnyContent = previewMaterial || installedFloor || installedWall
+  const hasAnyContent = previewFloor || installedFloor || previewWall || installedWall
   if (!hasAnyContent) return null
+
+  if (isCollapsed) {
+    return (
+      <button style={styles.btnExpand} onClick={() => setIsCollapsed(false)}>
+        {'<'}
+      </button>
+    )
+  }
 
   return (
     <div style={styles.container}>
-      {previewMaterial ? (
-        <>
-          {renderMaterialBlock(
-            previewMaterial, 
-            'Previsualizando Material', 
-            <>
-              <button style={styles.btnCancel} onClick={onCancelPreview}>Cancelar</button>
-              <button style={styles.btnApply} onClick={onApply}>Aplicar al {isWall ? 'Pared' : 'Piso'}</button>
-            </>
-          )}
+      <div style={styles.topHeader}>
+        <span style={{ fontWeight: 600 }}>Materiales en Escena</span>
+        <button style={styles.btnCollapse} onClick={() => setIsCollapsed(true)}>{'>'}</button>
+      </div>
 
-          <div style={styles.body}>
-            <hr style={styles.divider} />
-            <div style={styles.coverageHeader}>
-              <span>📊 Calculadora de Cobertura</span>
-              {covData?.computed && (
-                <button onClick={onToggleCoverSolid} style={{...styles.toggleBtn, ...(coverSolid ? styles.toggleBtnSolid : {})}}>
-                  {coverSolid ? '🧱 Sólido' : '🔲 Grilla'}
-                </button>
-              )}
-            </div>
-            {covData?.computed ? (
-              <div style={styles.coverageBox}>
-                <div style={styles.infoRow}><span>Área total a cubrir:</span><strong>{(isWall ? covData.wallAreaM2 : covData.floorAreaM2)?.toFixed(2)} m²</strong></div>
-                <div style={styles.infoRow}><span>Área por pieza:</span><strong>{covData.pieceAreaM2?.toFixed(4)} m²</strong></div>
-                <div style={styles.highlightBox}>
-                  <div style={styles.highlightTitle}>Total Piezas Estimadas</div>
-                  <div style={styles.highlightValue}>{isWall ? covData.estimatedUnits : covData.count} <span style={{fontSize: 14}}>unidades</span></div>
-                </div>
-              </div>
-            ) : (
-              <div style={styles.emptyCoverage}>Faltan dimensiones de la pieza para calcular la cobertura.</div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div style={styles.installedScroll}>
-          <div style={styles.installedHeader}>Materiales Instalados</div>
-          {installedFloor && renderMaterialBlock(installedFloor, 'Piso', 
-            <button style={styles.btnRemove} onClick={() => onRemove('floor')}>Quitar del Piso</button>, 
-            140
-          )}
-          {installedWall && renderMaterialBlock(installedWall, 'Paredes', 
-            <button style={styles.btnRemove} onClick={() => onRemove('walls')}>Quitar de Paredes</button>, 
-            140
-          )}
-          {!installedFloor && !installedWall && (
-            <div style={{padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 13}}>
-              No hay materiales instalados en la escena.
-            </div>
-          )}
-        </div>
-      )}
+      <div style={styles.installedScroll}>
+        {/* FLOOR SECTION */}
+        {previewFloor ? renderMaterialBlock(
+          previewFloor, 
+          'Previsualizando Piso', 
+          <>
+            <button style={styles.btnCancel} onClick={onCancelPreviewFloor}>Cancelar</button>
+            <button style={styles.btnApply} onClick={onApplyFloor}>Aplicar al Piso</button>
+          </>,
+          floorCoverage,
+          false
+        ) : installedFloor ? renderMaterialBlock(
+          installedFloor, 
+          'Piso Instalado', 
+          <button style={styles.btnRemove} onClick={onRemoveFloor}>Quitar del Piso</button>,
+          floorCoverage,
+          false
+        ) : null}
+
+        {/* WALL SECTION */}
+        {previewWall ? renderMaterialBlock(
+          previewWall, 
+          'Previsualizando Paredes', 
+          <>
+            <button style={styles.btnCancel} onClick={onCancelPreviewWall}>Cancelar</button>
+            <button style={styles.btnApply} onClick={onApplyWall}>Aplicar a Paredes</button>
+          </>,
+          wallCoverage,
+          true
+        ) : installedWall ? renderMaterialBlock(
+          installedWall, 
+          'Paredes Instaladas', 
+          <button style={styles.btnRemove} onClick={onRemoveWall}>Quitar de Paredes</button>,
+          wallCoverage,
+          true
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -174,6 +198,47 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+  },
+  btnCollapse: {
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    color: '#fff',
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 14,
+  },
+  btnExpand: {
+    position: 'fixed',
+    top: 62,
+    right: 0,
+    background: 'rgba(15, 23, 42, 0.85)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    borderRight: 'none',
+    borderRadius: '8px 0 0 8px',
+    color: '#fff',
+    width: 32,
+    height: 48,
+    cursor: 'pointer',
+    zIndex: 50,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 16,
+  },
+  topHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+    background: 'rgba(0,0,0,0.2)',
   },
   installedScroll: {
     overflowY: 'auto',
