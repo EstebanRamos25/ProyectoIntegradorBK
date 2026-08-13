@@ -146,11 +146,17 @@ Route::screen('backup', BackupScreen::class)
         ->push('Backups', route('platform.backup')));
 
 // Experiencias 3D (dentro del panel admin)
+Route::screen('three/menu', \App\Orchid\Screens\ThreeMenuScreen::class)
+    ->name('platform.three.menu')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Experiencia 3D', route('platform.three.menu')));
+
 Route::screen('three/demo', ThreeDemoScreen::class)
     ->name('platform.three.demo')
     ->breadcrumbs(fn (Trail $trail) => $trail
         ->parent('platform.index')
-        ->push('Experiencia 3D', route('platform.three.demo')));
+        ->push('Experiencia 3D (Demo)', route('platform.three.demo')));
 
 Route::screen('three/room', ThreeRoomScreen::class)
     ->name('platform.three.room')

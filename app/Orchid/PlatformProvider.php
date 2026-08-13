@@ -61,9 +61,12 @@ class PlatformProvider extends OrchidServiceProvider
             // ─── Experiencia 3D ───────────────────────────────────────────
             Menu::make('Editor 3D')
                 ->icon('bs.box')
-                ->url('/3d')
-                ->target('_blank')
+                ->route('platform.three.menu')
                 ->title('Experiencia 3D'),
+
+            Menu::make('Ir a Room demo')
+                ->icon('bs.play-circle')
+                ->route('platform.three.room'),
 
             Menu::make('Historial de Escenas')
                 ->icon('bs.camera')
