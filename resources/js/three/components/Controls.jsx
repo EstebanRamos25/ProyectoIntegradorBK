@@ -9,6 +9,7 @@ const FALLBACK_IMAGE_SVG =
 export function Controls({
   activeSurface,
   onActiveSurfaceChange,
+  activeWallKey = 'north',
   floor,
   setFloor,
   materials,
@@ -49,8 +50,10 @@ export function Controls({
   onRoomSizeChange,
   roomShape = 'rectangular',
   onRoomShapeChange,
-  windowConfig = { enabled: false, widthCm: 160, heightCm: 120, sillHeightCm: 90 },
-  onWindowConfigChange,
+  windows = [],
+  onAddWindow,
+  onUpdateWindow,
+  onRemoveWindow,
   quoteSummary,
   onGenerateQuote,
   quoteLoading,
@@ -353,95 +356,104 @@ export function Controls({
                 ))}
               </div>
 
-              {/* Personalización de Ventana 3D en Pared */}
+              {/* Personalización de Ventanas 3D Múltiples en Paredes */}
               <div style={{ ...styles.sectionTitleRow, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-                <span style={styles.sectionTitle}>Ventana 3D ({activeSurface === 'walls' ? 'Pared' : 'Pared activa'})</span>
+                <span style={styles.sectionTitle}>Ventanas 3D ({windows?.length || 0})</span>
                 <button
-                  onClick={() =>
-                    onWindowConfigChange?.({
-                      ...windowConfig,
-                      enabled: !windowConfig.enabled,
-                    })
-                  }
+                  onClick={() => onAddWindow?.(activeWallKey)}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: 12,
+                    padding: '5px 12px',
+                    borderRadius: 8,
                     border: 'none',
-                    background: windowConfig.enabled ? '#10b981' : '#334155',
+                    background: '#10b981',
                     color: '#fff',
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: 700,
                     cursor: 'pointer',
                   }}
                 >
-                  {windowConfig.enabled ? '🪟 Ventana ON' : '🪟 Ventana OFF'}
+                  ➕ Añadir Ventana
                 </button>
               </div>
 
-              {windowConfig.enabled && (
-                <div style={{ background: '#1e293b', padding: 10, borderRadius: 10, marginBottom: 14, border: '1px solid rgba(16,185,129,0.3)' }}>
-                  <div style={styles.sliderGroup}>
-                    <div style={styles.sliderHeader}>
-                      <span>Ancho de Ventana</span>
-                      <span style={styles.sliderValue}>{windowConfig.widthCm || 160} cm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={80}
-                      max={350}
-                      step={10}
-                      value={windowConfig.widthCm || 160}
-                      onChange={(e) =>
-                        onWindowConfigChange?.({
-                          ...windowConfig,
-                          widthCm: Number(e.target.value),
-                        })
-                      }
-                      style={styles.rangeInput}
-                    />
-                  </div>
+              {(!windows || windows.length === 0) ? (
+                <div style={{ fontSize: 11, color: '#94a3b8', padding: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 8, marginBottom: 14 }}>
+                  💡 Haz clic en "Añadir Ventana" para agregar una ventana 3D en la pared activa ({activeWallKey}).
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                  {windows.map((win, idx) => (
+                    <div key={win.id || idx} style={{ background: '#1e293b', padding: 10, borderRadius: 10, border: '1px solid rgba(16,185,129,0.3)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#10b981' }}>
+                          🪟 Ventana #{idx + 1} (Pared: {win.wallKey || 'activa'})
+                        </span>
+                        <button
+                          onClick={() => onRemoveWindow?.(win.id)}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            border: 'none',
+                            background: 'rgba(239,68,68,0.2)',
+                            color: '#f87171',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      </div>
 
-                  <div style={styles.sliderGroup}>
-                    <div style={styles.sliderHeader}>
-                      <span>Alto de Ventana</span>
-                      <span style={styles.sliderValue}>{windowConfig.heightCm || 120} cm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={60}
-                      max={220}
-                      step={10}
-                      value={windowConfig.heightCm || 120}
-                      onChange={(e) =>
-                        onWindowConfigChange?.({
-                          ...windowConfig,
-                          heightCm: Number(e.target.value),
-                        })
-                      }
-                      style={styles.rangeInput}
-                    />
-                  </div>
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Ancho</span>
+                          <span style={styles.sliderValue}>{win.widthCm || 160} cm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={80}
+                          max={350}
+                          step={10}
+                          value={win.widthCm || 160}
+                          onChange={(e) => onUpdateWindow?.(win.id, { widthCm: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
 
-                  <div style={styles.sliderGroup}>
-                    <div style={styles.sliderHeader}>
-                      <span>Altura desde Piso (Antepecho)</span>
-                      <span style={styles.sliderValue}>{windowConfig.sillHeightCm || 90} cm</span>
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Alto</span>
+                          <span style={styles.sliderValue}>{win.heightCm || 120} cm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={60}
+                          max={220}
+                          step={10}
+                          value={win.heightCm || 120}
+                          onChange={(e) => onUpdateWindow?.(win.id, { heightCm: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
+
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Antepecho (Desde piso)</span>
+                          <span style={styles.sliderValue}>{win.sillHeightCm || 90} cm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={30}
+                          max={180}
+                          step={5}
+                          value={win.sillHeightCm || 90}
+                          onChange={(e) => onUpdateWindow?.(win.id, { sillHeightCm: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min={30}
-                      max={180}
-                      step={5}
-                      value={windowConfig.sillHeightCm || 90}
-                      onChange={(e) =>
-                        onWindowConfigChange?.({
-                          ...windowConfig,
-                          sillHeightCm: Number(e.target.value),
-                        })
-                      }
-                      style={styles.rangeInput}
-                    />
-                  </div>
+                  ))}
                 </div>
               )}
 

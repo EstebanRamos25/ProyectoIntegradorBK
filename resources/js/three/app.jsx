@@ -61,12 +61,31 @@ function Demo() {
   const [wallCoverEnabled, setWallCoverEnabled] = useState(false)
   const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
   const [roomShape, setRoomShape] = useState('rectangular')
-  const [windowConfig, setWindowConfig] = useState({
-    enabled: false,
-    widthCm: 160,
-    heightCm: 120,
-    sillHeightCm: 90,
-  })
+  const [windows, setWindows] = useState([])
+
+  const addWindow = useCallback((wallKey) => {
+    const id = Date.now() + Math.floor(Math.random() * 1000)
+    setWindows((prev) => [
+      ...prev,
+      {
+        id,
+        wallKey: wallKey || activeWallKey || 'north',
+        widthCm: 160,
+        heightCm: 120,
+        sillHeightCm: 90,
+      },
+    ])
+  }, [activeWallKey])
+
+  const updateWindow = useCallback((id, patch) => {
+    setWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, ...patch } : w))
+    )
+  }, [])
+
+  const removeWindow = useCallback((id) => {
+    setWindows((prev) => prev.filter((w) => w.id !== id))
+  }, [])
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [scenes, setScenes] = useState([])
   const [scenesLoading, setScenesLoading] = useState(true)
@@ -277,7 +296,7 @@ function Demo() {
       version: 1,
       floor,
       roomShape,
-      windowConfig,
+      windows,
       roomSizeCm,
       selectedMaterialId,
       selectedWallMaterialId,
@@ -299,13 +318,15 @@ function Demo() {
         lockSizeXZ: !!p.lockSizeXZ,
       })),
     }
-  }, [floor, roomSizeCm, selectedMaterialId, selectedWallMaterialId, coverEnabled, pieces, wallPiece, activeWallKey, wallCoverEnabled])
+  }, [floor, roomShape, windows, roomSizeCm, selectedMaterialId, selectedWallMaterialId, coverEnabled, pieces, wallPiece, activeWallKey, wallCoverEnabled])
 
   const resetSceneState = useCallback(() => {
     setSelectedSceneId(null)
     setSceneName('')
     setPieces([])
     setWallPieces([])
+    setWindows([])
+    setRoomShape('rectangular')
     setSelected(null)
     setCoverage({ canCompute: false, computed: false })
     setCoverEnabled(false)
@@ -322,13 +343,20 @@ function Demo() {
       setRoomShape(sceneData.roomShape)
     }
 
-    if (sceneData.windowConfig && typeof sceneData.windowConfig === 'object') {
-      setWindowConfig({
-        enabled: !!sceneData.windowConfig.enabled,
-        widthCm: Number(sceneData.windowConfig.widthCm) || 160,
-        heightCm: Number(sceneData.windowConfig.heightCm) || 120,
-        sillHeightCm: Number(sceneData.windowConfig.sillHeightCm) || 90,
-      })
+    if (Array.isArray(sceneData.windows)) {
+      setWindows(sceneData.windows)
+    } else if (sceneData.windowConfig?.enabled) {
+      setWindows([
+        {
+          id: 1,
+          wallKey: 'north',
+          widthCm: Number(sceneData.windowConfig.widthCm) || 160,
+          heightCm: Number(sceneData.windowConfig.heightCm) || 120,
+          sillHeightCm: Number(sceneData.windowConfig.sillHeightCm) || 90,
+        },
+      ])
+    } else {
+      setWindows([])
     }
 
     if (sceneData.roomSizeCm && typeof sceneData.roomSizeCm === 'object') {
@@ -1381,8 +1409,10 @@ function Demo() {
         onRoomSizeChange={updateRoomSize}
         roomShape={roomShape}
         onRoomShapeChange={setRoomShape}
-        windowConfig={windowConfig}
-        onWindowConfigChange={setWindowConfig}
+        windows={windows}
+        onAddWindow={addWindow}
+        onUpdateWindow={updateWindow}
+        onRemoveWindow={removeWindow}
         quoteSummary={quoteSummary}
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
@@ -1445,7 +1475,8 @@ function Demo() {
         {/* Postprocesado */}
         <PostFX enabled={postFXOn && postprocessingConfig.enabled} dofOn={dofOn} selected={selected} />
 
-        <Floor kind={floor} width={roomSize.width} depth={roomSize.depth} onPointerDown={handleSelect} name="Piso" />
+        {/* Escenario y Piso */}
+        <Floor kind={floor} width={roomSize.width} depth={roomSize.depth} roomShape={roomShape} onPointerDown={handleSelect} name="Piso" />
 
         {/* Preview de cobertura (instanced, liviano) */}
         <CoverPreview
@@ -1474,70 +1505,198 @@ function Demo() {
           textureUrl={wallPiece?.textureUrl}
         />
 
-        {/* WindowMesh 3D Paramétrica en la pared activa */}
-        {windowConfig.enabled && (
-          <WindowMesh
-            position={
-              activeWallKey === 'south'
-                ? [0, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, roomSize.depth / 2 - wallThickness / 2 - 0.002]
-                : activeWallKey === 'west'
-                ? [-roomSize.width / 2 + wallThickness / 2 + 0.002, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, 0]
-                : activeWallKey === 'east'
-                ? [roomSize.width / 2 - wallThickness / 2 - 0.002, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, 0]
-                : [0, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, -roomSize.depth / 2 + wallThickness / 2 + 0.002]
-            }
-            rotation={
-              activeWallKey === 'south'
-                ? [0, Math.PI, 0]
-                : activeWallKey === 'west'
-                ? [0, Math.PI / 2, 0]
-                : activeWallKey === 'east'
-                ? [0, -Math.PI / 2, 0]
-                : [0, 0, 0]
-            }
-            widthM={(windowConfig.widthCm || 160) / 100}
-            heightM={(windowConfig.heightCm || 120) / 100}
-            depthM={wallThickness}
-            onPointerDown={handleSelect}
-          />
-        )}
+        {/* Renderizado de Ventanas 3D Múltiples */}
+        {windows.map((win, idx) => {
+          const wM = (win.widthCm || 160) / 100
+          const hM = (win.heightCm || 120) / 100
+          const sillM = (win.sillHeightCm || 90) / 100
+          const y = sillM + hM / 2
+          const eps = 0.003
+          const wallKey = win.wallKey || 'north'
+
+          let pos = [0, y, -roomSize.depth / 2 + wallThickness / 2 + eps]
+          let rot = [0, 0, 0]
+
+          switch (wallKey) {
+            case 'south':
+              if (roomShape === 'u_shape') {
+                pos = [0, y, 0 - wallThickness / 2 - eps] // Inner North acts as South facing
+              } else if (roomShape === 'l_shape') {
+                pos = [-roomSize.width / 4, y, roomSize.depth / 2 - wallThickness / 2 - eps]
+              } else {
+                pos = [0, y, roomSize.depth / 2 - wallThickness / 2 - eps]
+              }
+              rot = [0, Math.PI, 0]
+              break
+            case 'west':
+              if (roomShape === 't_shape') {
+                pos = [-roomSize.width / 2 + wallThickness / 2 + eps, y, -roomSize.depth / 4]
+              } else {
+                pos = [-roomSize.width / 2 + wallThickness / 2 + eps, y, 0]
+              }
+              rot = [0, Math.PI / 2, 0]
+              break
+            case 'east':
+              if (roomShape === 'l_shape' || roomShape === 't_shape') {
+                pos = [roomSize.width / 2 - wallThickness / 2 - eps, y, -roomSize.depth / 4]
+              } else {
+                pos = [roomSize.width / 2 - wallThickness / 2 - eps, y, 0]
+              }
+              rot = [0, -Math.PI / 2, 0]
+              break
+            case 'north':
+            default:
+              pos = [0, y, -roomSize.depth / 2 + wallThickness / 2 + eps]
+              rot = [0, 0, 0]
+              break
+          }
+
+          return (
+            <WindowMesh
+              key={win.id || idx}
+              position={pos}
+              rotation={rot}
+              widthM={wM}
+              heightM={hM}
+              depthM={wallThickness}
+              onPointerDown={handleSelect}
+            />
+          )
+        })}
 
         {/* Piezas dinámicas (inicia vacío) */}
         {pieces.map((p) => (
           <TexturedPieceMesh key={p.id} piece={p} onPointerDown={handleSelect} />
         ))}
-        {/* Paredes adaptables al tamaño configurado del cuarto */}
-        {/* Pared norte */}
+
+        {/* Paredes adaptables al tamaño y forma configurada del cuarto */}
+        
+        {/* Pared Norte (Común a todas las formas) */}
         <mesh position={[0, roomSize.height / 2, -roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Norte">
           <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
           <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
         </mesh>
-        {/* Pared sur */}
-        <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
-          <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
-          <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-        </mesh>
-        {/* Pared oeste */}
-        <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-          <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-          <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-        </mesh>
-        {/* Pared este (con ventana simple hueco central) */}
-        {/* Simplificación: dos columnas y travesaño arriba dejando hueco */}
-        <group name="Pared-Este">
-          <mesh position={[roomSize.width / 2, roomSize.height - eastLintelHeight / 2, 0]} castShadow onPointerDown={handleSelect} name="Marco-Este-Arriba">
-            <boxGeometry args={[wallThickness, eastLintelHeight, roomSize.depth]} />
-            <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-          </mesh>
-          <mesh position={[roomSize.width / 2, eastColumnHeight / 2, -(eastOpeningDepth / 2 + eastSideDepth / 2)]} castShadow onPointerDown={handleSelect} name="Columna-Este-1">
-            <boxGeometry args={[wallThickness, eastColumnHeight, eastSideDepth]} />
-            <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-          </mesh>
-          <mesh position={[roomSize.width / 2, eastColumnHeight / 2, eastOpeningDepth / 2 + eastSideDepth / 2]} castShadow onPointerDown={handleSelect} name="Columna-Este-2">
-            <boxGeometry args={[wallThickness, eastColumnHeight, eastSideDepth]} />
-            <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-          </mesh>
-        </group>
+
+        {roomShape === 'rectangular' && (
+          <>
+            <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
+              <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+          </>
+        )}
+
+        {roomShape === 'open_loft' && (
+          <>
+            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+          </>
+        )}
+
+        {roomShape === 'l_shape' && (
+          <>
+            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
+              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Arriba">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 4, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Interior">
+              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[0, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+          </>
+        )}
+
+        {roomShape === 'u_shape' && (
+          <>
+            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width * 3/8, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
+              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width * 3/8, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Derecha">
+              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste-Interior">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[0, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Interior">
+              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+          </>
+        )}
+
+        {roomShape === 't_shape' && (
+          <>
+            <mesh position={[-roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width * 3/8, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
+              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width * 3/8, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Derecha">
+              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste-Interior">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
+              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+            <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
+              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
+              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
+            </mesh>
+          </>
+        )}
   <OrbitControls ref={controlsRef} makeDefault
           enableDamping={controlsConfig.enableDamping}
           dampingFactor={controlsConfig.dampingFactor}
