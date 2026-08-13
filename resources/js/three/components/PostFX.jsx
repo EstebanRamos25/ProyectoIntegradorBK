@@ -16,39 +16,55 @@ export function RendererSetup() {
   return null
 }
 
+/**
+ * Postprocesado optimizado para CLARIDAD de materiales.
+ * - SSAO muy sutil: solo para dar profundidad en esquinas, no para oscurecer.
+ * - Bloom bajísimo: apenas un brillo en reflejos, sin neblina.
+ * - DOF suave y opcional: para screenshots, no para trabajo diario.
+ * - Sin vignette agresivo.
+ * - Contrast/saturation leve para que los materiales "pop" sin distorsionar colores.
+ */
 export function PostFX({ enabled, dofOn }) {
   if (!enabled) return null
-  const pp = postprocessingConfig
   return (
     <EffectComposer multisampling={0}>
-      {pp.ssao.enabled && (
-        <SSAO radius={pp.ssao.radius} intensity={pp.ssao.intensity} />
-      )}
-      {pp.bloom.enabled && (
-        <Bloom
-          intensity={pp.bloom.intensity}
-          luminanceThreshold={pp.bloom.luminanceThreshold}
-          luminanceSmoothing={pp.bloom.luminanceSmoothing}
-        />
-      )}
-      <BrightnessContrast brightness={0.02} contrast={0.08} />
-      <HueSaturation hue={0.0} saturation={0.06} />
+      {/* SSAO sutil: solo contacto entre superficies */}
+      <SSAO
+        radius={0.08}
+        intensity={8}
+        luminanceInfluence={0.6}
+        color="#000000"
+      />
+
+      {/* Bloom muy bajo: solo especularidades brillantes */}
+      <Bloom
+        intensity={0.25}
+        luminanceThreshold={0.85}
+        luminanceSmoothing={0.1}
+        mipmapBlur
+      />
+
+      {/* Leve contraste/saturación para claridad de materiales */}
+      <BrightnessContrast brightness={0.01} contrast={0.05} />
+      <HueSaturation hue={0.0} saturation={0.04} />
+
+      {/* DOF opcional: muy sutil, larga distancia focal */}
       {dofOn && (
         <DepthOfField
-          focusDistance={0.02}
-          focalLength={0.05}
-          bokehScale={2.0}
+          focusDistance={0.035}
+          focalLength={0.08}
+          bokehScale={1.2}
         />
       )}
-      {pp.toneMapping.enabled && (
-        <ToneMapping
-          mode={ACESFilmicToneMapping}
-          exposure={pp.toneMapping.exposure}
-        />
-      )}
-      {pp.vignette.enabled && (
-        <Vignette offset={pp.vignette.offset} darkness={pp.vignette.darkness} />
-      )}
+
+      {/* Tonemapping ACES para look natural */}
+      <ToneMapping
+        mode={ACESFilmicToneMapping}
+        exposure={1.0}
+      />
+
+      {/* Vignette muy sutil */}
+      <Vignette offset={0.3} darkness={0.35} />
     </EffectComposer>
   )
 }

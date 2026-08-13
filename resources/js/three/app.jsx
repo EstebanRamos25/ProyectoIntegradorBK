@@ -27,6 +27,9 @@ import { Controls } from './components/Controls'
 import { RendererSetup, PostFX } from './components/PostFX'
 import { CoverPreview, WallPiecePreview, WallCoverPreview } from './components/CoverPreviews'
 import { DynamicSpot } from './components/DynamicSpot'
+import { SunLight, getEnvironmentPreset } from './components/SunLight'
+import { WindowLight } from './components/WindowLight'
+import { LightingPanel } from './components/LightingPanel'
 import { useRecommendations } from './hooks/useRecommendations'
 import { ToastProvider, useToast } from './components/Toast'
 import { WindowMesh } from './components/WindowMesh'
@@ -46,7 +49,10 @@ function Demo() {
   const [selected, setSelected] = useState(null)
   const [postFXOn, setPostFXOn] = useState(true)
   const [softShadowsBad, setSoftShadowsBad] = useState(false)
-  const [dofOn, setDofOn] = useState(true)
+  const [dofOn, setDofOn] = useState(false)
+  const [timeOfDay, setTimeOfDay] = useState(10)
+  const [lightIntensity, setLightIntensity] = useState(1.0)
+  const [coverSolid, setCoverSolid] = useState(false)
   const [materials, setMaterials] = useState([])
   const [materialsLoading, setMaterialsLoading] = useState(true)
   const [materialsError, setMaterialsError] = useState(null)
@@ -141,7 +147,7 @@ function Demo() {
     [roomSizeCm]
   )
 
-  const wallThickness = 0.2
+  const wallThickness = 0.12
 
   const roomLimits = useMemo(
     () => ({
@@ -1417,17 +1423,20 @@ function Demo() {
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
         inventoryStatus={inventoryStatus}
+        coverSolid={coverSolid}
+        onToggleCoverSolid={() => setCoverSolid(v => !v)}
       />
-      <div style={{position:'fixed', top:12, right:12, zIndex:12, background:'rgba(0,0,0,.6)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif'}}>
-        <div style={{display:'flex', gap:8}}>
-          <button onClick={() => setPostFXOn(v => !v)} style={{padding:'6px 10px'}}>
-            PostFX {postFXOn ? 'ON' : 'OFF'}
-          </button>
-          <button onClick={() => setDofOn(v => !v)} style={{padding:'6px 10px'}}>
-            DOF {dofOn ? 'ON' : 'OFF'}
-          </button>
-        </div>
-      </div>
+      {/* Panel de Iluminación - esquina inferior izquierda */}
+      <LightingPanel
+        timeOfDay={timeOfDay}
+        onTimeOfDayChange={setTimeOfDay}
+        lightIntensity={lightIntensity}
+        onLightIntensityChange={setLightIntensity}
+        postFXOn={postFXOn}
+        onPostFXToggle={() => setPostFXOn(v => !v)}
+        dofOn={dofOn}
+        onDofToggle={() => setDofOn(v => !v)}
+      />
       {selected && (
         <div style={{position:'fixed', top:62, right:12, zIndex:11, background:'rgba(0,0,0,.75)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif', width:240}}>
           <div style={{fontWeight:'600', marginBottom:8}}>Objeto seleccionado</div>
@@ -1455,19 +1464,22 @@ function Demo() {
         <PerformanceMonitor onDecline={() => setSoftShadowsBad(true)} onIncline={() => setSoftShadowsBad(false)} />
         <SoftShadows size={35} focus={0.5} samples={softShadowsBad ? 6 : 16} />
 
-        <color attach="background" args={['#d0d0d0']} />
+        <color attach="background" args={['#87CEEB']} />
 
-        {/* Iluminación más cinematográfica: key/fill/rim */}
-        <ambientLight intensity={0.25} />
-        <directionalLight
-          castShadow
-          position={[6, 10, 6]}
-          intensity={2.4}
-          shadow-mapSize={2048}
-          shadow-bias={-0.00035}
+        {/* Sistema de iluminación solar realista */}
+        <SunLight timeOfDay={timeOfDay} intensity={lightIntensity} />
+
+        {/* Luz que entra por las ventanas */}
+        <WindowLight
+          windows={windows}
+          roomSize={roomSize}
+          wallThickness={wallThickness}
+          timeOfDay={timeOfDay}
+          intensity={lightIntensity}
         />
-        <directionalLight position={[-6, 4, -2]} intensity={0.7} color={'#d7e8ff'} />
-        <directionalLight position={[0, 3, -7]} intensity={0.9} color={'#fff1d6'} />
+
+        {/* Ambient mínimo de seguridad para que nada sea negro puro */}
+        <ambientLight intensity={0.08} />
 
         {/* Spotlight dinámico siguiendo selección */}
         <DynamicSpot selected={selected} />
@@ -1485,6 +1497,7 @@ function Demo() {
           pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
           roomSize={roomSize}
           textureUrl={pieces[0]?.textureUrl}
+          solid={coverSolid}
         />
 
         {/* Preview: pieza centrada en la pared activa */}
@@ -1503,6 +1516,7 @@ function Demo() {
           roomSize={roomSize}
           wallThickness={wallThickness}
           textureUrl={wallPiece?.textureUrl}
+          solid={coverSolid}
         />
 
         {/* Renderizado de Ventanas 3D Múltiples */}
@@ -1708,7 +1722,7 @@ function Demo() {
           minPolarAngle={controlsConfig.minPolarAngle}
           maxPolarAngle={controlsConfig.maxPolarAngle}
         />
-        <Environment preset="city" />
+        <Environment preset={getEnvironmentPreset(timeOfDay)} background={false} />
       </Canvas>
     </>
   )

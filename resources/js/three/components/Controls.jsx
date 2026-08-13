@@ -58,6 +58,8 @@ export function Controls({
   onGenerateQuote,
   quoteLoading,
   inventoryStatus,
+  coverSolid = false,
+  onToggleCoverSolid,
 }) {
   const [activeTab, setActiveTab] = useState('materials') // 'materials' | 'space' | 'coverage' | 'quote'
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -110,7 +112,7 @@ export function Controls({
           </div>
         </div>
 
-        <div style={styles.topBarRight}>
+        <div style={styles.topBarCenter}>
           {/* Scenes dropdown */}
           {!scenesLoading && !scenesError && scenes?.length > 0 && (
             <select
@@ -143,6 +145,10 @@ export function Controls({
             💾 Guardar
           </button>
         </div>
+
+        <div style={styles.topBarRight}>
+          {/* Empty to balance flex layout */}
+        </div>
       </div>
 
       {/* ─── PANEL LATERAL FLOTANTE REDISEÑADO ────────────────────────────────── */}
@@ -158,7 +164,7 @@ export function Controls({
           onClick={() => setIsCollapsed(!isCollapsed)}
           style={{
             ...styles.collapseBtn,
-            left: isCollapsed ? '320px' : '312px',
+            left: isCollapsed ? '370px' : '362px',
           }}
           title={isCollapsed ? 'Mostrar controles' : 'Ocultar controles'}
         >
@@ -617,15 +623,28 @@ export function Controls({
                 <div style={styles.infoCard}>
                   <div style={styles.infoCardHeader}>
                     <span>📊 Detalle de Cobertura</span>
-                    <button
-                      onClick={onToggleCover}
-                      style={{
-                        ...styles.togglePill,
-                        ...(coverEnabled ? styles.togglePillActive : {}),
-                      }}
-                    >
-                      Preview {coverEnabled ? 'ON' : 'OFF'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        onClick={onToggleCover}
+                        style={{
+                          ...styles.togglePill,
+                          ...(coverEnabled ? styles.togglePillActive : {}),
+                        }}
+                      >
+                        Preview {coverEnabled ? 'ON' : 'OFF'}
+                      </button>
+                      {coverEnabled && (
+                        <button
+                          onClick={onToggleCoverSolid}
+                          style={{
+                            ...styles.togglePill,
+                            ...(coverSolid ? styles.togglePillSolid : {}),
+                          }}
+                        >
+                          {coverSolid ? '🧱 Sólido' : '🔲 Grilla'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div style={styles.infoRow}>
                     <span>Dimensiones pieza:</span>
@@ -656,15 +675,28 @@ export function Controls({
                   <div style={styles.infoCardHeader}>
                     <span>📊 Cobertura en Paredes</span>
                     {wallCoverage?.computed && (
-                      <button
-                        onClick={onToggleCoverWalls}
-                        style={{
-                          ...styles.togglePill,
-                          ...(wallCoverEnabled ? styles.togglePillActive : {}),
-                        }}
-                      >
-                        Preview {wallCoverEnabled ? 'ON' : 'OFF'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={onToggleCoverWalls}
+                          style={{
+                            ...styles.togglePill,
+                            ...(wallCoverEnabled ? styles.togglePillActive : {}),
+                          }}
+                        >
+                          Preview {wallCoverEnabled ? 'ON' : 'OFF'}
+                        </button>
+                        {wallCoverEnabled && (
+                          <button
+                            onClick={onToggleCoverSolid}
+                            style={{
+                              ...styles.togglePill,
+                              ...(coverSolid ? styles.togglePillSolid : {}),
+                            }}
+                          >
+                            {coverSolid ? '🧱 Sólido' : '🔲 Grilla'}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div style={styles.infoRow}>
@@ -856,11 +888,21 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  topBarCenter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flex: 2,
   },
   topBarRight: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 10,
+    flex: 1,
   },
   appTitle: {
     fontWeight: 800,
@@ -945,7 +987,7 @@ const styles = {
     top: 76,
     left: 14,
     zIndex: 85,
-    width: 310,
+    width: 360,
     maxHeight: 'calc(100vh - 150px)',
     display: 'flex',
     flexDirection: 'column',
@@ -1288,6 +1330,10 @@ const styles = {
   },
   togglePillActive: {
     background: '#3b82f6',
+    color: '#fff',
+  },
+  togglePillSolid: {
+    background: '#10b981',
     color: '#fff',
   },
   infoRow: {

@@ -9,7 +9,11 @@ const WHITE_TEX_DATA_URL =
     '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ffffff"/></svg>'
   )
 
-export function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl }) {
+/**
+ * CoverPreview - Floor coverage preview.
+ * @param {boolean} solid - When true, renders opaque (material installed look). When false, renders as translucent grid.
+ */
+export function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl, solid = false }) {
   const MAX_PREVIEW = 800
   const instancesRef = useRef()
   const map = useTexture(textureUrl || WHITE_TEX_DATA_URL)
@@ -66,16 +70,20 @@ export function CoverPreview({ enabled, piece, pieceSizeCm, roomSize, textureUrl
   }, [preview, piece, roomSize])
 
   if (!preview) return null
+
+  const opacity = solid ? 1.0 : 0.55
+  const isTransparent = !solid
+
   return (
     <instancedMesh ref={instancesRef} args={[null, null, preview.total]} receiveShadow castShadow>
       <boxGeometry args={piece.size} />
       <meshStandardMaterial
         map={map}
         color={'#ffffff'}
-        roughness={piece.roughness}
-        metalness={piece.metalness}
-        opacity={0.55}
-        transparent
+        roughness={solid ? (piece.roughness ?? 0.75) : piece.roughness}
+        metalness={solid ? (piece.metalness ?? 0.0) : piece.metalness}
+        opacity={opacity}
+        transparent={isTransparent}
       />
     </instancedMesh>
   )
@@ -132,7 +140,11 @@ export function WallPiecePreview({ piece, roomSize, wallThickness, activeWallKey
   )
 }
 
-export function WallCoverPreview({ enabled, piece, roomSize, wallThickness, textureUrl }) {
+/**
+ * WallCoverPreview - Wall coverage preview.
+ * @param {boolean} solid - When true, renders opaque. When false, renders as translucent grid.
+ */
+export function WallCoverPreview({ enabled, piece, roomSize, wallThickness, textureUrl, solid = false }) {
   const MAX_PREVIEW = 800
   const instancesRef = useRef()
   const map = useTexture((textureUrl || piece?.textureUrl) ?? WHITE_TEX_DATA_URL)
@@ -231,16 +243,19 @@ export function WallCoverPreview({ enabled, piece, roomSize, wallThickness, text
 
   if (!preview) return null
 
+  const opacity = solid ? 1.0 : 0.55
+  const isTransparent = !solid
+
   return (
     <instancedMesh ref={instancesRef} args={[null, null, preview.total]} receiveShadow castShadow>
       <boxGeometry args={[preview.pieceW, preview.pieceH, 0.06]} />
       <meshStandardMaterial
         map={map}
         color={'#ffffff'}
-        roughness={0.75}
+        roughness={solid ? 0.7 : 0.75}
         metalness={0.0}
-        opacity={0.55}
-        transparent
+        opacity={opacity}
+        transparent={isTransparent}
       />
     </instancedMesh>
   )
