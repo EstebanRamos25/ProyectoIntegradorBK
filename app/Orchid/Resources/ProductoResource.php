@@ -4,6 +4,7 @@ namespace App\Orchid\Resources;
 
 use App\Models\Inventario;
 use App\Orchid\Filters\ProductoSearchFilter;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -317,6 +318,8 @@ class ProductoResource extends Resource
         if (!empty($imageIds)) {
             $model->attachment()->sync($imageIds);
         }
+
+        Cache::forget('three.materials.catalog');
     }
 
     public function with(): array

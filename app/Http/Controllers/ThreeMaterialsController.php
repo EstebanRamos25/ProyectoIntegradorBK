@@ -54,7 +54,7 @@ class ThreeMaterialsController extends Controller
 
         $invByProduct = $invAgg->groupBy('product_id');
 
-        $items = $productos
+        return $productos
             ->map(function (Producto $producto) use ($invByProduct): ?array {
                 $attachment = $producto->attachment('image')->first();
                 $url = null;

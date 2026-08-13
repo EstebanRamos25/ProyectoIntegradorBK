@@ -29,6 +29,7 @@ import { CoverPreview, WallPiecePreview, WallCoverPreview } from './components/C
 import { DynamicSpot } from './components/DynamicSpot'
 import { useRecommendations } from './hooks/useRecommendations'
 import { ToastProvider, useToast } from './components/Toast'
+import { WindowMesh } from './components/WindowMesh'
 
 const WHITE_TEX_DATA_URL =
   'data:image/svg+xml;utf8,' +
@@ -59,6 +60,13 @@ function Demo() {
   const [wallCoverageState, setWallCoverageState] = useState({ canCompute: false, computed: false })
   const [wallCoverEnabled, setWallCoverEnabled] = useState(false)
   const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
+  const [roomShape, setRoomShape] = useState('rectangular')
+  const [windowConfig, setWindowConfig] = useState({
+    enabled: false,
+    widthCm: 160,
+    heightCm: 120,
+    sillHeightCm: 90,
+  })
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [scenes, setScenes] = useState([])
   const [scenesLoading, setScenesLoading] = useState(true)
@@ -268,6 +276,8 @@ function Demo() {
     return {
       version: 1,
       floor,
+      roomShape,
+      windowConfig,
       roomSizeCm,
       selectedMaterialId,
       selectedWallMaterialId,
@@ -307,6 +317,19 @@ function Demo() {
   const hydrateScene = useCallback((sceneData) => {
     if (!sceneData || typeof sceneData !== 'object') return
     setFloor(sceneData.floor === 'ceramic' ? 'ceramic' : 'wood')
+
+    if (sceneData.roomShape) {
+      setRoomShape(sceneData.roomShape)
+    }
+
+    if (sceneData.windowConfig && typeof sceneData.windowConfig === 'object') {
+      setWindowConfig({
+        enabled: !!sceneData.windowConfig.enabled,
+        widthCm: Number(sceneData.windowConfig.widthCm) || 160,
+        heightCm: Number(sceneData.windowConfig.heightCm) || 120,
+        sillHeightCm: Number(sceneData.windowConfig.sillHeightCm) || 90,
+      })
+    }
 
     if (sceneData.roomSizeCm && typeof sceneData.roomSizeCm === 'object') {
       setRoomSizeCm((prev) => ({
@@ -1356,6 +1379,10 @@ function Demo() {
         coverEnabled={coverEnabled}
         roomSizeCm={roomSizeCm}
         onRoomSizeChange={updateRoomSize}
+        roomShape={roomShape}
+        onRoomShapeChange={setRoomShape}
+        windowConfig={windowConfig}
+        onWindowConfigChange={setWindowConfig}
         quoteSummary={quoteSummary}
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
@@ -1446,6 +1473,34 @@ function Demo() {
           wallThickness={wallThickness}
           textureUrl={wallPiece?.textureUrl}
         />
+
+        {/* WindowMesh 3D Paramétrica en la pared activa */}
+        {windowConfig.enabled && (
+          <WindowMesh
+            position={
+              activeWallKey === 'south'
+                ? [0, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, roomSize.depth / 2 - wallThickness / 2 - 0.002]
+                : activeWallKey === 'west'
+                ? [-roomSize.width / 2 + wallThickness / 2 + 0.002, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, 0]
+                : activeWallKey === 'east'
+                ? [roomSize.width / 2 - wallThickness / 2 - 0.002, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, 0]
+                : [0, ((windowConfig.sillHeightCm || 90) + (windowConfig.heightCm || 120) / 2) / 100, -roomSize.depth / 2 + wallThickness / 2 + 0.002]
+            }
+            rotation={
+              activeWallKey === 'south'
+                ? [0, Math.PI, 0]
+                : activeWallKey === 'west'
+                ? [0, Math.PI / 2, 0]
+                : activeWallKey === 'east'
+                ? [0, -Math.PI / 2, 0]
+                : [0, 0, 0]
+            }
+            widthM={(windowConfig.widthCm || 160) / 100}
+            heightM={(windowConfig.heightCm || 120) / 100}
+            depthM={wallThickness}
+            onPointerDown={handleSelect}
+          />
+        )}
 
         {/* Piezas dinámicas (inicia vacío) */}
         {pieces.map((p) => (
