@@ -112,9 +112,11 @@ document.head.appendChild(style);
     if(href.includes('/admin/users')) theme = 'usuarios';
     else if(href.includes('/admin/roles')) theme = 'roles';
     else if(href.includes('/admin/producto') || href.includes('/admin/productos') || href.includes('/admin/crud/list/producto-resources')) theme = 'productos';
-    else if(href.includes('/admin/inventario') || href.includes('/admin/inventarios')) theme = 'inventarios';
+    else if(href.includes('/admin/inventario') || href.includes('/admin/inventarios') || href.includes('/admin/crud/list/inventario-resources')) theme = 'inventarios';
     else if(href.includes('/admin/proyecto') || href.includes('/admin/proyectos')) theme = 'proyectos';
     else if(href.includes('/admin/escena') || href.includes('/admin/escenas')) theme = 'escenas';
+    else if(href.includes('/admin/crud/list/venta-resources')) theme = 'ventas';
+    else if(href.includes('/admin/crud/list/three-quote-resources')) theme = 'cotizaciones';
     document.body.dataset.theme = theme;
 
     // Vista Tabla/Tarjetas para listado de productos (ruta del CRUD Resource)
@@ -133,6 +135,20 @@ document.head.appendChild(style);
     } else {
       removeProductsViewToggle();
       document.body.classList.remove('cards-grid-products');
+    }
+
+    // Modern List Cards (Ventas y Cotizaciones)
+    if(href.includes('/admin/crud/list/venta-resources') || href.includes('/admin/crud/list/three-quote-resources')) {
+      document.body.classList.add('modern-list-cards');
+    } else {
+      document.body.classList.remove('modern-list-cards');
+    }
+
+    // Rich Rows (Inventario)
+    if(href.includes('/admin/crud/list/inventario-resources')) {
+      document.body.classList.add('rich-rows-table');
+    } else {
+      document.body.classList.remove('rich-rows-table');
     }
   };
   applyTheme();

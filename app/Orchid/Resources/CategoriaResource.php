@@ -56,12 +56,12 @@ class CategoriaResource extends Resource
             TD::make('Tipo_Material','TIPO DE MATERIAL'),
             TD::make('Resistencia','RESISTENCIA'),
 
-            TD::make('created_at', 'Date of creation')
+            TD::make('created_at', 'FECHA DE CREACIÓN')
                 ->render(function ($model) {
                     return $model->created_at->toDateTimeString();
                 }),
 
-            TD::make('updated_at', 'Update date')
+            TD::make('updated_at', 'FECHA DE ACTUALIZACIÓN')
                 ->render(function ($model) {
                     return $model->updated_at->toDateTimeString();
                 }),
@@ -81,8 +81,8 @@ class CategoriaResource extends Resource
             Sight::make('Descripcion','DESCRIPCION'),
             Sight::make('Tipo_Material','TIPO DE MATERIAL'),
             Sight::make('Resistencia','RESISTENCIA'),
-            Sight::make('created_at','Date of creation'),
-            Sight::make('updated_at','Update date'),
+            Sight::make('created_at','FECHA DE CREACIÓN'),
+            Sight::make('updated_at','FECHA DE ACTUALIZACIÓN'),
 
 
         ];

@@ -97,26 +97,53 @@ class InventarioResource extends Resource
     public function columns(): array
     {
         return [
-            TD::make('id'),
-            TD::make('Codigo_Lote', 'LOTE'),
-            TD::make('Tono', 'TONO'),
-            TD::make('Calibre', 'CALIBRE'),
-            TD::make('Cajas_Disponibles', 'CAJAS DISP.'),
-            TD::make('Costo_M2', 'COSTO/M²'),
-            TD::make('Cajas_Entrada', 'CAJAS ENTR.'),
-            TD::make('Cantidad', 'CANTIDAD (LEGACY)'),
-            TD::make('Ubicacion', 'UBICACIÓN'),
-            TD::make('Estado', 'ESTADO'),
-            TD::make('producto.Nombre', 'PRODUCTO'), // Muestra el nombre del producto relacionado
-
-            TD::make('created_at', 'Date of creation')
+            TD::make('producto.Nombre', 'PRODUCTO Y DETALLES')
                 ->render(function ($model) {
-                    return $model->created_at->toDateTimeString();
+                    $nombre = e($model->producto->Nombre ?? 'Sin Producto');
+                    $lote = e($model->Codigo_Lote ?? '-');
+                    $tono = e($model->Tono ?? '-');
+                    $calibre = e($model->Calibre ?? '-');
+                    
+                    return "<div style='display:flex;flex-direction:column;gap:4px;'>
+                                <strong style='font-size:14px;color:#0f172a;'>{$nombre}</strong>
+                                <div style='font-size:12px;color:#64748b;display:flex;gap:12px;'>
+                                    <span><strong>Lote:</strong> {$lote}</span>
+                                    <span><strong>Tono:</strong> {$tono}</span>
+                                    <span><strong>Calibre:</strong> {$calibre}</span>
+                                </div>
+                            </div>";
                 }),
 
-            TD::make('updated_at', 'Update date')
+            TD::make('Cajas_Disponibles', 'STOCK Y VALOR')
                 ->render(function ($model) {
-                    return $model->updated_at->toDateTimeString();
+                    $disp = (int) $model->Cajas_Disponibles;
+                    $entr = (int) $model->Cajas_Entrada;
+                    $costo = number_format((float)$model->Costo_M2, 2, '.', ',');
+                    $color = $disp > 0 ? '#10b981' : '#ef4444';
+                    
+                    return "<div style='display:flex;flex-direction:column;gap:4px;'>
+                                <div style='font-size:15px;font-weight:700;color:{$color};'>{$disp} cajas disp.</div>
+                                <div style='font-size:12px;color:#64748b;'>Entrantes: {$entr} | Costo: Bs {$costo}/m²</div>
+                            </div>";
+                }),
+
+            TD::make('Estado', 'UBICACIÓN Y ESTADO')
+                ->render(function ($model) {
+                    $ubi = e($model->Ubicacion ?? 'No asignada');
+                    $estado = e($model->Estado ?? '-');
+                    
+                    $badgeBg = $estado === 'Disponible' ? '#d1fae5' : '#fef3c7';
+                    $badgeColor = $estado === 'Disponible' ? '#065f46' : '#92400e';
+                    
+                    return "<div style='display:flex;flex-direction:column;align-items:flex-start;gap:6px;'>
+                                <div style='font-size:13px;color:#334155;'><i class='bs.geo-alt' style='margin-right:4px;'></i>{$ubi}</div>
+                                <span style='background:{$badgeBg};color:{$badgeColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;'>{$estado}</span>
+                            </div>";
+                }),
+
+            TD::make('created_at', 'FECHA DE CREACIÓN')
+                ->render(function ($model) {
+                    return "<span style='font-size:12px;color:#94a3b8;'>" . $model->created_at->toFormattedDateString() . "</span>";
                 }),
         ];
     }
@@ -140,8 +167,8 @@ class InventarioResource extends Resource
             Sight::make('Ubicacion', 'UBICACIÓN'),
             Sight::make('Estado', 'ESTADO'),
             Sight::make('producto.Nombre', 'PRODUCTO'),
-            Sight::make('created_at', 'Date of creation'),
-            Sight::make('updated_at', 'Update date'),
+            Sight::make('created_at', 'FECHA DE CREACIÓN'),
+            Sight::make('updated_at', 'FECHA DE ACTUALIZACIÓN'),
         ];
     }
 

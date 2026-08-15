@@ -70,12 +70,12 @@ class PromocionResource extends Resource
             TD::make('Min_M2', 'MIN M²'),
             TD::make('Activo', 'ACTIVA'),
 
-            TD::make('created_at', 'Date of creation')
+            TD::make('created_at', 'FECHA DE CREACIÓN')
                 ->render(function ($model) {
                     return $model->created_at->toDateTimeString();
                 }),
 
-            TD::make('updated_at', 'Update date')
+            TD::make('updated_at', 'FECHA DE ACTUALIZACIÓN')
                 ->render(function ($model) {
                     return $model->updated_at->toDateTimeString();
                 }),
@@ -96,8 +96,8 @@ class PromocionResource extends Resource
             Sight::make('Descuento', 'DESCUENTO'),
             Sight::make('Min_M2', 'MIN M²'),
             Sight::make('Activo', 'ACTIVA'),
-            Sight::make('created_at', 'Date of creation'),
-            Sight::make('updated_at', 'Update date'),
+            Sight::make('created_at', 'FECHA DE CREACIÓN'),
+            Sight::make('updated_at', 'FECHA DE ACTUALIZACIÓN'),
         ];
     }
 

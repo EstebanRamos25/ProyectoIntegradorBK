@@ -71,29 +71,45 @@ class VentaResource extends Resource
     public function columns(): array
     {
         return [
-            TD::make('id'),
-            TD::make('Total', 'TOTAL'),
-            TD::make('Fecha', 'FECHA'),
-            TD::make('Origen', 'ORIGEN'),
-            TD::make('Area_M2', 'M²'),
-            TD::make('Subtotal', 'SUBTOTAL'),
-            TD::make('Descuento_Pct', 'DESC %'),
-            TD::make('Costo_Total', 'COSTO'),
-            TD::make('Ganancia', 'GANANCIA'),
-
-            TD::make('usuario.name', 'USUARIO'),
-            TD::make('promocion.Nombre', 'PROMOCIÓN'),
-            TD::make('inventario.id', 'INVENTARIO'),
-            TD::make('producto.Nombre', 'PRODUCTO'),
-
-            TD::make('created_at', 'Date of creation')
+            TD::make('Detalles', '')
                 ->render(function ($model) {
-                    return $model->created_at->toDateTimeString();
-                }),
-
-            TD::make('updated_at', 'Update date')
-                ->render(function ($model) {
-                    return $model->updated_at->toDateTimeString();
+                    $id = $model->id;
+                    $origen = e($model->Origen ?? 'Tienda');
+                    $fecha = $model->Fecha ? date('d M Y', strtotime($model->Fecha)) : '-';
+                    $cliente = e($model->usuario->name ?? 'Cliente General');
+                    $producto = e($model->producto->Nombre ?? 'Varios');
+                    $m2 = $model->Area_M2 ?? 0;
+                    
+                    $subtotal = number_format((float)$model->Subtotal, 2);
+                    $desc = number_format((float)$model->Descuento_Pct, 0);
+                    $total = number_format((float)$model->Total, 2);
+                    
+                    return "
+                    <div style='display:flex; justify-content:space-between; align-items:center; width:100%;'>
+                        <!-- Bloque Izquierdo: Icono y Detalles -->
+                        <div style='display:flex; gap:16px; align-items:center;'>
+                            <div style='width:48px; height:48px; border-radius:12px; background:#eef2ff; color:#4f46e5; display:flex; align-items:center; justify-content:center; font-size:20px;'>
+                                <i class='bs.receipt'></i>
+                            </div>
+                            <div style='display:flex; flex-direction:column; gap:4px;'>
+                                <div style='display:flex; align-items:center; gap:8px;'>
+                                    <strong style='font-size:16px; color:#0f172a;'>#{$id} - {$cliente}</strong>
+                                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600;'>{$origen}</span>
+                                </div>
+                                <div style='font-size:13px; color:#64748b; display:flex; gap:12px;'>
+                                    <span><i class='bs.calendar' style='margin-right:4px;'></i>{$fecha}</span>
+                                    <span><i class='bs.box' style='margin-right:4px;'></i>{$producto} ({$m2} m²)</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bloque Derecho: Financiero -->
+                        <div style='display:flex; flex-direction:column; align-items:flex-end; gap:2px;'>
+                            <div style='font-size:12px; color:#94a3b8;'>Subtotal: Bs {$subtotal} <span style='color:#ef4444;'>( -{$desc}% )</span></div>
+                            <strong style='font-size:20px; color:#10b981; font-weight:800;'>Bs {$total}</strong>
+                        </div>
+                    </div>
+                    ";
                 }),
         ];
     }
@@ -122,8 +138,8 @@ class VentaResource extends Resource
             Sight::make('promocion.Nombre', 'PROMOCIÓN'),
             Sight::make('inventario.id', 'INVENTARIO'),
             Sight::make('producto.Nombre', 'PRODUCTO'),
-            Sight::make('created_at', 'Date of creation'),
-            Sight::make('updated_at', 'Update date'),
+            Sight::make('created_at', 'FECHA DE CREACIÓN'),
+            Sight::make('updated_at', 'FECHA DE ACTUALIZACIÓN'),
         ];
     }
 

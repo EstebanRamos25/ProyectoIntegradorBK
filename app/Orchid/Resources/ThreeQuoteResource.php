@@ -66,34 +66,80 @@ class ThreeQuoteResource extends Resource
     public function columns(): array
     {
         return [
-            TD::make('id', 'ID'),
-            TD::make('status', 'ESTADO'),
-            TD::make('scene.name', 'ESCENA'),
-            TD::make('user.name', 'CLIENTE'),
-            TD::make('producto.Nombre', 'PRODUCTO'),
-            TD::make('boxes_required', 'CAJAS'),
-            TD::make('total', 'TOTAL'),
-            TD::make('convert', 'VENTA')->alignRight()->render(function (ThreeQuote $quote) {
-                return Button::make('Convertir a venta')
-                    ->icon('bs.cart-check')
-                    ->method('action', [
-                        '_action' => ConvertThreeQuoteToSaleAction::name(),
-                        '_models' => [(int) $quote->id],
-                    ])
-                    ->canSee($quote->status === 'sent');
-            }),
-            TD::make('pdf_path', 'PDF')->render(function (ThreeQuote $quote) {
-                if (!$quote->pdf_path) {
-                    return '-';
-                }
+            TD::make('Detalles', '')
+                ->render(function (ThreeQuote $quote) {
+                    $id = $quote->id;
+                    $estado = $quote->status;
+                    $cliente = e($quote->user->name ?? 'Cliente Desconocido');
+                    $producto = e($quote->producto->Nombre ?? 'Sin Producto');
+                    $cajas = $quote->boxes_required;
+                    $total = number_format((float)$quote->total, 2);
+                    $fecha = $quote->created_at ? $quote->created_at->toFormattedDateString() : '-';
+                    
+                    // Badges para estado
+                    $badgeBg = '#f1f5f9';
+                    $badgeColor = '#475569';
+                    $icon = 'bs.file-earmark-text';
+                    $iconColor = '#64748b';
+                    
+                    if ($estado === 'draft') {
+                        $badgeBg = '#fef3c7'; $badgeColor = '#92400e'; $iconColor = '#f59e0b';
+                    } elseif ($estado === 'sent') {
+                        $badgeBg = '#dbeafe'; $badgeColor = '#1e40af'; $iconColor = '#3b82f6'; $icon = 'bs.send';
+                    } elseif ($estado === 'sold') {
+                        $badgeBg = '#d1fae5'; $badgeColor = '#065f46'; $iconColor = '#10b981'; $icon = 'bs.check-circle';
+                    }
 
-                return Link::make('PDF')
-                    ->href(asset('storage/'.$quote->pdf_path))
-                    ->target('_blank');
-            }),
-            TD::make('sent_at', 'ENVIADA'),
-            TD::make('sold_at', 'VENDIDA'),
-            TD::make('updated_at', 'ACTUALIZADO'),
+                    // Botón Convertir
+                    $btnConvert = '';
+                    if ($estado === 'sent') {
+                        $btnConvert = Button::make('Vender')
+                            ->icon('bs.cart-check')
+                            ->class('btn btn-sm btn-success style-convert-btn')
+                            ->method('action', [
+                                '_action' => ConvertThreeQuoteToSaleAction::name(),
+                                '_models' => [(int) $quote->id],
+                            ])->render();
+                    }
+
+                    // Enlace PDF
+                    $btnPdf = '';
+                    if ($quote->pdf_path) {
+                        $url = asset('storage/'.$quote->pdf_path);
+                        $btnPdf = "<a href='{$url}' target='_blank' class='btn btn-sm btn-outline-secondary' style='display:inline-flex;align-items:center;gap:4px;'><i class='bs.file-pdf'></i> PDF</a>";
+                    }
+                    
+                    return "
+                    <div style='display:flex; justify-content:space-between; align-items:center; width:100%;'>
+                        <div style='display:flex; gap:16px; align-items:center;'>
+                            <div style='width:48px; height:48px; border-radius:12px; background:#f8fafc; color:{$iconColor}; display:flex; align-items:center; justify-content:center; font-size:20px;'>
+                                <i class='{$icon}'></i>
+                            </div>
+                            <div style='display:flex; flex-direction:column; gap:4px;'>
+                                <div style='display:flex; align-items:center; gap:8px;'>
+                                    <strong style='font-size:16px; color:#0f172a;'>Cotización #{$id} - {$cliente}</strong>
+                                    <span style='background:{$badgeBg}; color:{$badgeColor}; font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase;'>{$estado}</span>
+                                </div>
+                                <div style='font-size:13px; color:#64748b; display:flex; gap:12px;'>
+                                    <span><i class='bs.calendar' style='margin-right:4px;'></i>{$fecha}</span>
+                                    <span><i class='bs.box' style='margin-right:4px;'></i>{$producto} ({$cajas} cajas)</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style='display:flex; align-items:center; gap:20px;'>
+                            <div style='display:flex; flex-direction:column; align-items:flex-end; gap:2px;'>
+                                <div style='font-size:12px; color:#94a3b8;'>Total Estimado</div>
+                                <strong style='font-size:20px; color:#10b981; font-weight:800;'>Bs {$total}</strong>
+                            </div>
+                            <div style='display:flex; gap:8px;'>
+                                {$btnPdf}
+                                {$btnConvert}
+                            </div>
+                        </div>
+                    </div>
+                    ";
+                }),
         ];
     }
 
