@@ -73,43 +73,85 @@ class VentaResource extends Resource
         return [
             TD::make('Detalles', '')
                 ->render(function ($model) {
-                    $id = $model->id;
-                    $origen = e($model->Origen ?? 'Tienda');
-                    $fecha = $model->Fecha ? date('d M Y', strtotime($model->Fecha)) : '-';
-                    $cliente = e($model->usuario->name ?? 'Cliente General');
-                    $producto = e($model->producto->Nombre ?? 'Varios');
-                    $m2 = $model->Area_M2 ?? 0;
-                    
+                    $id      = $model->id;
+                    $origen  = e($model->Origen ?? 'Tienda');
+                    $fecha   = $model->Fecha ? date('d M Y', strtotime($model->Fecha)) : '-';
+                    $cliente = e(optional($model->usuario)->name ?? 'Cliente General');
+                    $producto = e(optional($model->producto)->Nombre ?? 'Varios');
+                    $m2      = $model->Area_M2 ?? 0;
+
                     $subtotal = number_format((float)$model->Subtotal, 2);
-                    $desc = number_format((float)$model->Descuento_Pct, 0);
-                    $total = number_format((float)$model->Total, 2);
-                    
+                    $desc     = number_format((float)$model->Descuento_Pct, 0);
+                    $total    = number_format((float)$model->Total, 2);
+
+                    // ── Bloque de factura (cargado con loadMissing para evitar N+1 silencioso) ──
+                    $model->loadMissing('factura');
+                    $factura = $model->factura;
+
+                    if ($factura) {
+                        $numF   = e($factura->numero_factura);
+                        $pdfUrl = route('facturas.pdf', $factura->id);
+                        $estilo = $factura->estado === 'emitida'
+                            ? 'color:#065f46; background:#d1fae5;'
+                            : 'color:#991b1b; background:#fee2e2;';
+                        $estadoTxt = strtoupper($factura->estado);
+
+                        $facturaHtml = "
+                        <div style='display:flex; flex-direction:column; align-items:flex-end; gap:3px; margin-top:6px;'>
+                            <span style='{$estilo} padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600;'>
+                                {$estadoTxt}
+                            </span>
+                            <span style='font-size:12px; font-weight:700; color:#1e293b;'>{$numF}</span>
+                            <a href='{$pdfUrl}' target='_blank'
+                               style='font-size:11px; color:#4f46e5; text-decoration:none;'>
+                               &#128196; Ver Factura PDF
+                            </a>
+                        </div>";
+                    } else {
+                        $generateUrl = route('facturas.generate', $model->id);
+                        $csrf        = csrf_token();
+                        $facturaHtml = "
+                        <form method='POST' action='{$generateUrl}' data-turbo='false' style='margin:0; margin-top:6px;'>
+                            <input type='hidden' name='_token' value='{$csrf}'>
+                            <button type='submit'
+                                style='background:#4f46e5; color:#fff; border:none; border-radius:8px;
+                                       padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer;'
+                                onclick=\"return confirm('Generar factura para la venta #{$id}?')\">
+                                &#9654; Generar Factura
+                            </button>
+                        </form>";
+                    }
+
                     return "
-                    <div style='display:flex; justify-content:space-between; align-items:center; width:100%;'>
-                        <!-- Bloque Izquierdo: Icono y Detalles -->
+                    <div style='display:flex; justify-content:space-between; align-items:flex-start; width:100%;'>
+
                         <div style='display:flex; gap:16px; align-items:center;'>
-                            <div style='width:48px; height:48px; border-radius:12px; background:#eef2ff; color:#4f46e5; display:flex; align-items:center; justify-content:center; font-size:20px;'>
-                                <i class='bs.receipt'></i>
+                            <div style='width:48px; height:48px; border-radius:12px; background:#eef2ff;
+                                        color:#4f46e5; display:flex; align-items:center; justify-content:center; font-size:20px;'>
+                                &#9654;
                             </div>
                             <div style='display:flex; flex-direction:column; gap:4px;'>
                                 <div style='display:flex; align-items:center; gap:8px;'>
                                     <strong style='font-size:16px; color:#0f172a;'>#{$id} - {$cliente}</strong>
-                                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600;'>{$origen}</span>
+                                    <span style='background:#f1f5f9; color:#475569; font-size:11px;
+                                                 padding:2px 8px; border-radius:12px; font-weight:600;'>{$origen}</span>
                                 </div>
                                 <div style='font-size:13px; color:#64748b; display:flex; gap:12px;'>
-                                    <span><i class='bs.calendar' style='margin-right:4px;'></i>{$fecha}</span>
-                                    <span><i class='bs.box' style='margin-right:4px;'></i>{$producto} ({$m2} m²)</span>
+                                    <span>&#128197; {$fecha}</span>
+                                    <span>&#128230; {$producto} ({$m2} m&sup2;)</span>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Bloque Derecho: Financiero -->
+
                         <div style='display:flex; flex-direction:column; align-items:flex-end; gap:2px;'>
-                            <div style='font-size:12px; color:#94a3b8;'>Subtotal: Bs {$subtotal} <span style='color:#ef4444;'>( -{$desc}% )</span></div>
+                            <div style='font-size:12px; color:#94a3b8;'>Subtotal: Bs {$subtotal}
+                                <span style='color:#ef4444;'>( -{$desc}% )</span>
+                            </div>
                             <strong style='font-size:20px; color:#10b981; font-weight:800;'>Bs {$total}</strong>
+                            {$facturaHtml}
                         </div>
-                    </div>
-                    ";
+
+                    </div>";
                 }),
         ];
     }

@@ -42,6 +42,20 @@ class PlatformProvider extends OrchidServiceProvider
                 ->icon('bs.boxes')
                 ->route('platform.resource.list', 'inventario-resources')
                 ->title('Inventario'),
+                
+            Menu::make('Alertas de Stock')
+                ->icon('bs.exclamation-triangle')
+                ->route('platform.inventario.low_stock')
+                ->badge(function () {
+                    // Cacheamos el conteo para no saturar la BD en cada carga de página
+                    return \Illuminate\Support\Facades\Cache::remember('low_stock_badge', 60, function () {
+                        $stockAgg = \App\Models\Inventario::selectRaw('producto_id, SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)) as total_stock')
+                            ->groupBy('producto_id')
+                            ->get();
+                        $critical = $stockAgg->where('total_stock', '<=', 10)->count();
+                        return $critical > 0 ? (string)$critical : null;
+                    });
+                }),
 
             // ─── Ventas ───────────────────────────────────────────────────
             Menu::make('Cotizaciones 3D')
@@ -53,10 +67,20 @@ class PlatformProvider extends OrchidServiceProvider
                 ->icon('bs.cart-check')
                 ->route('platform.resource.list', 'venta-resources'),
 
+            Menu::make('Facturas')
+                ->icon('bs.file-earmark-check')
+                ->route('platform.resource.list', 'factura-resources'),
+
             Menu::make('Reporte de ganancias')
                 ->icon('bs.cash-stack')
                 ->route('platform.ventas.report')
                 ->permission('platform.ventas.report'),
+                
+            // ─── Inteligencia Artificial ──────────────────────────────────
+            Menu::make('Decisiones y Tendencias')
+                ->icon('bs.robot')
+                ->route('platform.decisiones')
+                ->title('Inteligencia Artificial'),
 
             // ─── Experiencia 3D ───────────────────────────────────────────
             Menu::make('Editor 3D')

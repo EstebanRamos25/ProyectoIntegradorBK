@@ -88,6 +88,12 @@ class ThreeMaterialsController extends Controller
                     ->values();
 
                 $totalBoxes = (int) $lots->sum('boxes_available');
+                
+                // Si no hay stock físico disponible, el producto no se envía al catálogo 3D
+                if ($totalBoxes <= 0) {
+                    return null;
+                }
+
                 $m2PerBox = (float) ($producto->M2_Por_Caja ?? 0);
                 $availableM2 = $m2PerBox > 0 ? round($totalBoxes * $m2PerBox, 4) : null;
 

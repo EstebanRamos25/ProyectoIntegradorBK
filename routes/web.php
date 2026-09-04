@@ -11,6 +11,7 @@ use App\Http\Controllers\ThreeQuoteController;
 use App\Http\Controllers\ThreeInteractionEventController;
 use App\Http\Controllers\ThreeRecommendationController;
 use App\Http\Controllers\Auth\ClientAuthController;
+use App\Http\Controllers\FacturaController;
 use App\Models\ThreeScene;
 use App\Models\ThreeQuote;
 use App\Models\Producto;
@@ -202,4 +203,13 @@ Route::group(['middleware' => ['web', 'auth']], function () {
      ->name('testing.download');
 });
 
+// ── Facturas ──────────────────────────────────────────────────────────────
+Route::group(['middleware' => ['web', 'auth']], function () {
+    // Generar factura desde una venta (POST para prevenir acceso accidental)
+    Route::post('/facturas/{venta}/generate', [FacturaController::class, 'generate'])
+         ->name('facturas.generate');
 
+    // Ver/descargar el PDF de una factura (inline en navegador)
+    Route::get('/facturas/{factura}/pdf', [FacturaController::class, 'show'])
+         ->name('facturas.pdf');
+});

@@ -311,7 +311,7 @@ class ThreeQuotationController extends Controller
 
         return response($pdfOutput, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="cotizacion-escena-3d-'.now()->format('Ymd_His').'.pdf"',
+            'Content-Disposition' => 'inline; filename="cotizacion-escena-3d-'.now()->format('Ymd_His').'.pdf"',
         ]);
     }
 

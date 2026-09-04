@@ -25,7 +25,7 @@ class ResourceListScreen extends \Orchid\Crud\Screens\ListScreen
 
         $export = Link::make('Exportar reporte PDF')
             ->icon('bs.download')
-            ->href(route('platform.inventario.export'))
+            ->href(route('platform.inventario.report'))
             ->target('_blank');
 
         array_splice($commandBar, 1, 0, [$export]);

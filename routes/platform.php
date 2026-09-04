@@ -13,6 +13,9 @@ use App\Orchid\Screens\Backup\BackupScreen;
 use App\Orchid\Screens\Three\ThreeDemoScreen;
 use App\Orchid\Screens\Three\ThreeRoomScreen;
 use App\Orchid\Screens\Ventas\VentasProfitReportScreen;
+use App\Orchid\Screens\Inventario\InventarioReportScreen;
+use App\Orchid\Screens\Inventario\LowStockScreen;
+use App\Orchid\Screens\Recommender\MLDecisionReportScreen;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
 use App\Orchid\Screens\TqaScreen;
@@ -108,6 +111,27 @@ Route::screen('ventas/report', VentasProfitReportScreen::class)
     ->breadcrumbs(fn (Trail $trail) => $trail
         ->parent('platform.index')
         ->push('Reporte de ganancias', route('platform.ventas.report')));
+
+// Reporte del inventario
+Route::get('inventario/report', [\App\Orchid\Screens\Inventario\InventarioReportScreen::class, 'export'])
+    ->name('platform.inventario.report');
+
+// Alertas de Stock
+Route::screen('inventario/low-stock', LowStockScreen::class)
+    ->name('platform.inventario.low_stock')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Alertas de Stock'));
+
+// Decisiones y Tendencias (ML)
+Route::screen('recommender/decisiones', MLDecisionReportScreen::class)
+    ->name('platform.decisiones')
+    ->breadcrumbs(fn (Trail $trail) => $trail
+        ->parent('platform.index')
+        ->push('Decisiones (IA)'));
+
+Route::get('recommender/decisiones/report', [MLDecisionReportScreen::class, 'export'])
+    ->name('platform.decisiones.report');
 
 // Descarga de backups (GET) - definir ANTES para evitar colisión con Screen route
 Route::get('backup/download', [BackupScreen::class, 'download'])->name('platform.backup.download');

@@ -30,9 +30,12 @@ class ThreeQuoteController extends Controller
         $baseName = trim((string) $baseName, '-');
         $baseName = $baseName !== '' ? $baseName : 'escena-3d';
 
-        return response()->download(
+        return response()->file(
             Storage::disk('public')->path($quote->pdf_path),
-            'cotizacion-'.$baseName.'-'.$quote->id.'.pdf'
+            [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="cotizacion-'.$baseName.'-'.$quote->id.'.pdf"'
+            ]
         );
     }
 

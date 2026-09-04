@@ -116,7 +116,7 @@ class InventarioResource extends Resource
 
             TD::make('Cajas_Disponibles', 'STOCK Y VALOR')
                 ->render(function ($model) {
-                    $disp = (int) $model->Cajas_Disponibles;
+                    $disp = (int) ($model->Cajas_Disponibles ?? $model->Cantidad ?? 0);
                     $entr = (int) $model->Cajas_Entrada;
                     $costo = number_format((float)$model->Costo_M2, 2, '.', ',');
                     $color = $disp > 0 ? '#10b981' : '#ef4444';
@@ -132,8 +132,13 @@ class InventarioResource extends Resource
                     $ubi = e($model->Ubicacion ?? 'No asignada');
                     $estado = e($model->Estado ?? '-');
                     
-                    $badgeBg = $estado === 'Disponible' ? '#d1fae5' : '#fef3c7';
-                    $badgeColor = $estado === 'Disponible' ? '#065f46' : '#92400e';
+                    $disp = (int) ($model->Cajas_Disponibles ?? $model->Cantidad ?? 0);
+                    if ($disp <= 0) {
+                        $estado = 'Agotado';
+                    }
+                    
+                    $badgeBg = $estado === 'Disponible' ? '#d1fae5' : ($estado === 'Agotado' ? '#fef2f2' : '#fef3c7');
+                    $badgeColor = $estado === 'Disponible' ? '#065f46' : ($estado === 'Agotado' ? '#ef4444' : '#92400e');
                     
                     return "<div style='display:flex;flex-direction:column;align-items:flex-start;gap:6px;'>
                                 <div style='font-size:13px;color:#334155;'><i class='bs.geo-alt' style='margin-right:4px;'></i>{$ubi}</div>
@@ -188,5 +193,34 @@ class InventarioResource extends Resource
     public function with(): array
     {
         return ['producto'];
+    }
+
+    /**
+     * Action to create and update the model
+     *
+     * @param \Illuminate\Http\Request $request
+     * @param \Illuminate\Database\Eloquent\Model $model
+     */
+    public function save(\Illuminate\Http\Request $request, \Illuminate\Database\Eloquent\Model $model): void
+    {
+        $model->fill($request->all())->save();
+        
+        // Invalidar caché del catálogo 3D al agregar/editar stock
+        \Illuminate\Support\Facades\Cache::forget('three.materials.catalog');
+    }
+
+    /**
+     * Action to delete the model
+     *
+     * @param \Illuminate\Database\Eloquent\Model $model
+     *
+     * @throws \Exception
+     */
+    public function onDelete(\Illuminate\Database\Eloquent\Model $model): void
+    {
+        $model->delete();
+        
+        // Invalidar caché del catálogo 3D al eliminar stock
+        \Illuminate\Support\Facades\Cache::forget('three.materials.catalog');
     }
 }

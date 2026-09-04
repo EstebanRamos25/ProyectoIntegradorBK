@@ -83,4 +83,12 @@ class Venta extends Model
     {
         return $this->belongsTo(ThreeQuote::class, 'three_quote_id');
     }
+
+    /**
+     * Factura generada para esta venta (si fue facturada).
+     */
+    public function factura()
+    {
+        return $this->hasOne(\App\Models\Factura::class);
+    }
 }
