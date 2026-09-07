@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Orchid\Screens;
 
-use App\Models\Escena;
+use App\Models\ThreeScene;
+use App\Models\ThreeQuote;
 use App\Models\Inventario;
 use App\Models\Producto;
-use App\Models\Proyecto;
 use App\Orchid\Layouts\Dashboard\ProductGalleryLayout;
 use App\Orchid\Layouts\Examples\ChartBarExample;
 use App\Orchid\Layouts\Examples\ChartLineExample;
@@ -33,8 +33,8 @@ class PlatformScreen extends Screen
             $totals = [
                 'products'    => Producto::count(),
                 'inventories' => Inventario::count(),
-                'projects'    => Proyecto::count(),
-                'scenes'      => Escena::count(),
+                'projects'    => ThreeScene::count(),
+                'scenes'      => ThreeQuote::count(),
             ];
 
             // Months window (3/6/12)
@@ -49,10 +49,10 @@ class PlatformScreen extends Screen
             }
 
             $productCountsByMonth = $this->countsByMonth(Producto::class, $start, $months);
-            $projectCountsByMonth = $this->countsByMonth(Proyecto::class, $start, $months);
+            $projectCountsByMonth = $this->countsByMonth(ThreeScene::class, $start, $months);
 
-            // Recent Projects
-            $recentProjects = Proyecto::with(['user', 'producto'])
+            // Recent Scenes
+            $recentProjects = ThreeScene::with(['user'])
                 ->latest()
                 ->take(8)
                 ->get();
@@ -115,8 +115,8 @@ class PlatformScreen extends Screen
             $invStateLabels = $invStateAgg->pluck('label')->all();
             $invStateValues = $invStateAgg->pluck('total')->map(fn($v) => (int)$v)->all();
 
-            // Projects by User (top 8)
-            $projUserAgg = DB::table('proyectos as pr')
+            // Scenes by User (top 8)
+            $projUserAgg = DB::table('three_scenes as pr')
                 ->join('users as u', 'u.id', '=', 'pr.user_id')
                 ->selectRaw('u.name as label, COUNT(*) as total')
                 ->groupBy('u.name')
@@ -150,7 +150,7 @@ class PlatformScreen extends Screen
                         'labels' => $labels,
                     ],
                     [
-                        'name'   => 'Proyectos',
+                        'name'   => 'Escenas 3D',
                         'values' => $projectCountsByMonth,
                         'labels' => $labels,
                     ],
@@ -173,7 +173,7 @@ class PlatformScreen extends Screen
                 ],
                 'projectsByUser' => [
                     [
-                        'name'   => 'Proyectos por usuario',
+                        'name'   => 'Escenas por usuario',
                         'values' => $projUserValues,
                         'labels' => $projUserLabels,
                     ],
@@ -222,7 +222,7 @@ class PlatformScreen extends Screen
          */
         public function description(): ?string
         {
-            return 'Resumen estadistico de Productos, Inventarios, Proyectos y Escenas.';
+            return 'Resumen estadistico de Productos, Inventarios, Escenas 3D y Cotizaciones.';
         }
 
         /**
@@ -250,25 +250,24 @@ class PlatformScreen extends Screen
                 Layout::metrics([
                     'Productos'    => 'metrics.products',
                     'Inventarios'  => 'metrics.inventories',
-                    'Proyectos'    => 'metrics.projects',
-                    'Escenas'      => 'metrics.scenes',
+                    'Escenas 3D'   => 'metrics.projects',
+                    'Cotizaciones' => 'metrics.scenes',
                 ]),
 
                 new ProductGalleryLayout(),
 
                 Layout::columns([
                     ChartLineExample::make('charts', 'Actividad (6 meses)')
-                        ->description('Altas mensuales de Productos y Proyectos.'),
+                        ->description('Altas mensuales de Productos y Escenas 3D.'),
                     ChartBarExample::make('charts', 'Comparativo')
-                        ->description('Comparacion mensual de Productos vs Proyectos.'),
+                        ->description('Comparacion mensual de Productos vs Escenas 3D.'),
                 ]),
 
                 Layout::table('recentProjects', [
-                    TD::make('Nombre', 'Proyecto'),
+                    TD::make('name', 'Escena (Proyecto)'),
                     TD::make('user.name', 'Usuario'),
-                    TD::make('producto.Nombre', 'Producto'),
                     TD::make('created_at', 'Creado')->render(fn ($p) => optional($p->created_at)?->toDateTimeString()),
-                ])->title('Proyectos recientes'),
+                ])->title('Escenas 3D recientes'),
 
                 Layout::columns([
                     ChartPieExample::make('productsByCategory', 'Productos por categoria')
@@ -278,8 +277,8 @@ class PlatformScreen extends Screen
                 ]),
 
                 Layout::columns([
-                    ChartBarExample::make('projectsByUser', 'Proyectos por usuario')
-                        ->description('Top 8 usuarios con mas proyectos.'),
+                    ChartBarExample::make('projectsByUser', 'Escenas por usuario')
+                        ->description('Top 8 usuarios con mas escenas guardadas.'),
                     ChartBarExample::make('productsByBrand', 'Productos por marca')
                         ->description('Top 8 marcas con mas productos.'),
                 ]),

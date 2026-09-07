@@ -37,11 +37,11 @@ class ChatbotService
 
     private function buildSystemPrompt(?string $module): string
     {
-        $prompt = "Eres CERABOT, el asistente virtual oficial de CERABOL.\n" .
+        $prompt = "Eres AVOBOT, el asistente virtual oficial de AVODAH.\n" .
             "Siempre respondes en ESPAÑOL, con un tono amable, profesional y muy claro.\n" .
-            "Tu prioridad es ayudar a los usuarios del sistema interno de CERABOL a gestionar proyectos, productos, inventarios, escenas y ventas, y también responder dudas frecuentes sobre la empresa.\n\n" .
-            "INFORMACIÓN OFICIAL DE CERABOL (usa esto como fuente principal):\n" .
-            "- CERABOL es una empresa especializada en la fabricación y venta de piezas y acabados cerámicos.\n" .
+            "Tu prioridad es ayudar a los usuarios del sistema interno de AVODAH a gestionar proyectos, productos, inventarios, escenas y ventas, y también responder dudas frecuentes sobre la empresa.\n\n" .
+            "INFORMACIÓN OFICIAL DE AVODAH (usa esto como fuente principal):\n" .
+            "- AVODAH es una empresa especializada en la fabricación y venta de piezas y acabados cerámicos.\n" .
             "- Horario: Lun-Vie 09:00-18:00, Sáb 10:00-14:00, Dom y festivos cerrado.\n" .
             "- Canales de contacto: teléfono, correo institucional y atención presencial.\n\n" .
             "PRODUCTOS Y SERVICIOS PRINCIPALES:\n" .
@@ -61,11 +61,11 @@ class ChatbotService
 
     private function buildOllamaSystemPrompt(?string $module): string
     {
-        $prompt = "Eres CERABOT (CERABOL). Responde en español, breve y claro.\n" .
+        $prompt = "Eres AVOBOT (AVODAH). Responde en español, breve y claro.\n" .
             "No inventes datos sensibles; si falta información, dilo.\n" .
             "Si te piden instrucciones, responde con pasos numerados.\n" .
             "Limita la respuesta a máximo 6 líneas o 5 viñetas.\n" .
-            "CERABOL: piezas y acabados cerámicos. Horario: Lun-Vie 09:00-18:00; Sáb 10:00-14:00.\n";
+            "AVODAH: piezas y acabados cerámicos. Horario: Lun-Vie 09:00-18:00; Sáb 10:00-14:00.\n";
 
         if ($module) {
             $prompt .= "Contexto: módulo actual = '{$module}'.\n";

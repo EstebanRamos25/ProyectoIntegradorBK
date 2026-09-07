@@ -19,8 +19,10 @@
     </style>
 </head>
 <body>
-
-    <h1>Decisiones y Tendencias (IA)</h1>
+    <div style="margin-bottom: 12px;">
+        <img src="{{ public_path('images/avodah_logo.png') }}" alt="AVODAH Logo" style="height: 35px;">
+    </div>
+    <h1>Decisiones y Tendencias (IA) {{ isset($filter) && $filter !== 'todos' ? '- ' . $filter : '' }}</h1>
     <div class="header-meta">
         <strong>Generado el:</strong> {{ $generatedAt->format('d/m/Y H:i:s') }} <br>
         <strong>Reporte Inteligente:</strong> Cruce de Demanda (Score Red Neuronal) vs Inventario (Oferta).

@@ -50,6 +50,7 @@ $disableViteHotIfNotReachable = function (): void {
 Route::get('/', function () {
      $homeProducts = Producto::query()
           ->with(['categoria', 'attachment'])
+          ->whereHas('attachment')
           ->orderByDesc('id')
           ->get()
           ->map(function (Producto $p): array {

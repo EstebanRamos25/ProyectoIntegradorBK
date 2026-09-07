@@ -68,6 +68,7 @@
 {{-- ── ENCABEZADO ── --}}
 <div class="header">
   <div class="header-left">
+    <img src="{{ public_path('images/avodah_logo.png') }}" alt="AVODAH Logo" style="height: 45px; margin-bottom: 8px;">
     <div class="empresa-nombre">{{ $factura->razon_social_emisor }}</div>
     <div class="empresa-sub">NIT: {{ $factura->nit_emisor }}</div>
     <div class="empresa-sub" style="margin-top:4px;">Materiales y Acabados para Construcción</div>

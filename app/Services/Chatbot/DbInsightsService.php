@@ -25,10 +25,9 @@ class DbInsightsService
         $text = Str::lower($message);
 
         // Respuestas instantáneas para saludos / cortesía (evita latencia del modelo)
-        if ($this->isGreetingOnly($text)) {
-            return "¡Hola! Soy CERABOT.\n\n" .
-                "Puedo ayudarte con dudas del sistema (productos, inventarios, proyectos, escenas, ventas, usuarios).\n" .
-                "Dime qué necesitas o en qué módulo estás trabajando.";
+        if ($this->isGreeting($text)) {
+            return "¡Hola! Soy AVOBOT.\n\n" .
+                "Estoy aquí para ayudarte. Si no sabes qué preguntar, di **'ayuda'** o **'qué puedo hacer'** y te mostraré ejemplos.";
         }
 
         // Respuesta instantánea para "ayuda" / "qué puedes hacer" (evita latencia del modelo)
@@ -45,6 +44,28 @@ class DbInsightsService
         // Resumen global cuando no hay módulo o cuando lo piden explícitamente
         if ($module === '' && $this->wantsSummary($text)) {
             return $this->summaryGlobal();
+        }
+
+        // Consultas de inteligencia rápida de productos (para evitar timeout del LLM)
+        if (Str::contains($text, ['recomienda', 'recomendación', 'recomendacion', 'recomendar'])) {
+            $ans = $this->answerRecomendacionesGlobal($text);
+            if ($ans) return $ans;
+        }
+
+        if (Str::contains($text, ['material', 'cerámica', 'ceramica', 'madera', 'acero', 'vidrio'])) {
+            $ans = $this->answerMaterialesGlobal($text);
+            if ($ans) return $ans;
+        }
+
+        if (Str::contains($text, ['vida util', 'vida útil', 'resistencia', 'dura', 'duracion', 'duración'])) {
+            $ans = $this->answerResistenciaGlobal($text);
+            if ($ans) return $ans;
+        }
+
+        // Búsqueda específica de productos por nombre (ej: "cuantos porcelanatos de color negro tenemos")
+        if ($this->wantsCount($text) && preg_match('/cu[aá]nt[ao]s?\s+(.*?)\s+(tenemos|hay|quedan|existen)/i', $text, $matches)) {
+            $ans = $this->answerBuscarProductoGlobal($matches[1]);
+            if ($ans) return $ans;
         }
 
         if ($module === 'productos') {
@@ -192,9 +213,122 @@ class DbInsightsService
         ]);
     }
 
+    private function buildResponse(string $context, $data): string
+    {
+        return $context . "\n" . collect($data)->map(fn($item) => "- " . json_encode($item))->join("\n");
+    }
+
+    private function answerRecomendacionesGlobal(string $text): ?string
+    {
+        $keywords = ['baño' => 'baño', 'cocina' => 'cocina', 'exterior' => 'exterior', 'interior' => 'interior', 'piso' => 'piso', 'pared' => 'pared', 'sala' => 'sala'];
+        $found = null;
+        foreach ($keywords as $k => $v) {
+            if (Str::contains($text, $k)) {
+                $found = $v;
+                break;
+            }
+        }
+        
+        if (!$found) {
+            return "Puedo recomendarte productos según su uso. Por favor, dime para qué área lo necesitas (ej. baño, cocina, exterior, interior, piso).";
+        }
+
+        $prods = Producto::query()
+            ->where('Nombre', 'LIKE', "%{$found}%")
+            ->orWhere('Descripcion', 'LIKE', "%{$found}%")
+            ->limit(5)
+            ->get();
+            
+        if ($prods->isEmpty()) {
+            return "Lo siento, no encontré productos específicos recomendados para '{$found}' en este momento.";
+        }
+        
+        $msg = "Aquí tienes algunas recomendaciones ideales para **{$found}**:\n";
+        foreach ($prods as $p) {
+            $precio = number_format((float)$p->Precio, 2);
+            $msg .= "- **{$p->Nombre}** (Bs {$precio}): {$p->Descripcion}\n";
+        }
+        return $msg;
+    }
+
+    private function answerMaterialesGlobal(string $text): ?string
+    {
+        $materials = ['ceramica' => 'Cerámica', 'cerámica' => 'Cerámica', 'madera' => 'Madera', 'acero' => 'Acero', 'vidrio' => 'Vidrio', 'cristal' => 'Vidrio'];
+        $found = null;
+        foreach ($materials as $k => $v) {
+            if (Str::contains($text, $k)) {
+                $found = $v;
+                break;
+            }
+        }
+        
+        if (!$found) {
+            if (Str::contains($text, 'cuantos') || Str::contains($text, 'cuántos')) {
+                return "Manejamos materiales como Cerámica, Madera, Acero y Vidrio. ¿De cuál te gustaría saber el stock?";
+            }
+            return null; // Si no preguntan por stock de un material específico, dejarlo pasar
+        }
+
+        $cat = Categoria::where('Nombre', $found)->orWhere('Tipo_Material', 'LIKE', "%{$found}%")->first();
+        if (!$cat) {
+            return "Actualmente no tenemos la categoría de {$found} registrada con detalles.";
+        }
+        
+        $count = Producto::where('categoria_id', $cat->id)->count();
+        $stock = (int) Inventario::whereIn('producto_id', function($q) use ($cat) {
+            $q->select('id')->from('productos')->where('categoria_id', $cat->id);
+        })->selectRaw('COALESCE(SUM(COALESCE(Cajas_Disponibles, Cantidad, 0)), 0) as total')->value('total');
+        
+        return "Sobre el material **{$found}**:\n- Tenemos **{$count}** productos distintos en el catálogo.\n- Contamos con un total de **{$stock}** cajas disponibles en inventario.";
+    }
+
+    private function answerResistenciaGlobal(string $text): ?string
+    {
+        return "La **vida útil y resistencia** de nuestros productos depende principalmente del tipo de material:\n\n" .
+               "- **Cerámica:** Alta resistencia (ej. 312kPs), ideal para pisos y revestimientos duraderos.\n" .
+               "- **Acero:** Máxima resistencia (ej. 321kPs), usado en estructuras.\n" .
+               "- **Madera:** Resistencia media (ej. 79kPs), excelente para interiores.\n" .
+               "- **Vidrio:** Resistencia baja (ej. 20kPs), uso principalmente decorativo.\n\n" .
+               "Todos nuestros productos están certificados para garantizar la mejor calidad en tu proyecto.";
+    }
+
+    private function answerBuscarProductoGlobal(string $search): ?string
+    {
+        $search = trim(str_replace([' de color ', ' que sean ', ' con ', ' para '], ' ', $search));
+        if (strlen($search) < 3) return null;
+        
+        $terms = explode(' ', $search);
+        
+        $q = Producto::query();
+        foreach($terms as $term) {
+            if(strlen($term) < 3) continue;
+            $term = rtrim($term, 's'); // remover plural simple
+            $q->where(function($sub) use ($term) {
+                $sub->where('Nombre', 'LIKE', "%{$term}%")
+                    ->orWhere('Descripcion', 'LIKE', "%{$term}%")
+                    ->orWhereHas('categoria', function($c) use ($term) {
+                        $c->where('Nombre', 'LIKE', "%{$term}%");
+                    });
+            });
+        }
+        
+        $prods = $q->limit(5)->get();
+        if ($prods->isEmpty()) {
+            return null; // Dejar que caiga a las reglas generales o al LLM
+        }
+        
+        $count = $prods->count();
+        $msg = "Encontré estos productos relacionados con '{$search}':\n";
+        foreach($prods as $p) {
+            $stock = Inventario::where('producto_id', $p->id)->sum('Cajas_Disponibles');
+            $msg .= "- **{$p->Nombre}**: " . ((int)$stock) . " cajas disponibles.\n";
+        }
+        return $msg;
+    }
+
     private function helpForModule(string $module): string
     {
-        $base = "Puedo ayudarte con el sistema CERABOL. Ejemplos de preguntas rápidas:\n";
+        $base = "Puedo ayudarte con el sistema AVODAH. Ejemplos de preguntas rápidas:\n";
 
         if ($module === 'productos') {
             return $base .
@@ -231,7 +365,7 @@ class DbInsightsService
             "Dime en qué módulo estás (productos, inventarios, proyectos, ventas, etc.) para darte respuestas más precisas.";
     }
 
-    private function isGreetingOnly(string $text): bool
+    private function isGreeting(string $text): bool
     {
         $t = trim($text);
         if ($t === '') return false;
@@ -254,8 +388,10 @@ class DbInsightsService
 
         if (in_array($t, $greetings, true)) return true;
 
-        // Variantes cortas: "hola cerabot", "hola bot"
-        if (Str::startsWith($t, 'hola ') && Str::length($t) <= 20) return true;
+        // Variantes cortas: "hola avobot", "hola bot"
+        if (in_array($text, ['hola', 'holaa', 'buen dia', 'buenas tardes', 'buenas noches', 'hola avobot', 'hola bot'], true)) {
+            return true;
+        }
 
         return false;
     }

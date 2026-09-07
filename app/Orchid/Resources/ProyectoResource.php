@@ -30,12 +30,17 @@ class ProyectoResource extends Resource
         return 'Resumen de escenas y cotizaciones generadas por cada cliente.';
     }
 
-    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    public function paginationQuery(ResourceRequest $request, Model $model): Builder
     {
         return $model->newQuery()
             ->withCount(['threeScenes', 'threeQuotes'])
             ->having('three_scenes_count', '>', 0)
             ->orHaving('three_quotes_count', '>', 0);
+    }
+
+    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $this->paginationQuery($request, $model);
     }
 
     public function fields(): array

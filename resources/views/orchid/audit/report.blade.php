@@ -290,9 +290,12 @@
     </style>
 </head>
 <body>
+    <div style="margin-bottom: 12px;">
+        <img src="{{ public_path('images/avodah_logo.png') }}" alt="AVODAH Logo" style="height: 35px;">
+    </div>
     <div class="hero">
-        <div class="eyebrow">Proyecto Integrador BK</div>
-        <h1>Reporte de auditoría</h1>
+        <div class="eyebrow">AVODAH</div>
+        <h1>Auditoría del Sistema</h1>
         <p class="subtitle">Resumen ejecutivo y detalle visual de los eventos registrados en el sistema.</p>
         <div class="meta">
             Generado: {{ $generatedAt->format('d/m/Y H:i:s') }}

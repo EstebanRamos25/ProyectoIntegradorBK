@@ -1,6 +1,6 @@
 # Chatbot con Ollama (Proveedor Local Gratuito)
 
-Este proyecto ahora usa **Ollama** como proveedor por defecto (`CHAT_PROVIDER=ollama`) para el asistente interno CERABOT.
+Este proyecto ahora usa **Ollama** como proveedor por defecto (`CHAT_PROVIDER=ollama`) para el asistente interno AVOBOT.
 
 ## 1. Variables de entorno necesarias
 Añade al archivo `.env` (o actualiza) lo siguiente:

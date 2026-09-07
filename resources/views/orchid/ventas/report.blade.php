@@ -126,8 +126,11 @@
     </style>
 </head>
 <body>
+    <div style="margin-bottom: 12px;">
+        <img src="{{ public_path('images/avodah_logo.png') }}" alt="AVODAH Logo" style="height: 35px;">
+    </div>
     <div class="hero">
-        <div class="eyebrow">Proyecto Integrador BK</div>
+        <div class="eyebrow">AVODAH</div>
         <h1>Reporte de ganancias (3D)</h1>
         <p class="subtitle">Ganancia estimada a partir del costo por m² configurado en Productos.</p>
         <div class="meta">

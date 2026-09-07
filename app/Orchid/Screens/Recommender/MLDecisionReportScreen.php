@@ -114,10 +114,22 @@ class MLDecisionReportScreen extends Screen
     public function commandBar(): iterable
     {
         return [
-            Link::make('Descargar Reporte PDF')
+            \Orchid\Screen\Actions\DropDown::make('Generar Reporte PDF')
                 ->icon('bs.file-pdf')
-                ->route('platform.decisiones.report')
-                ->target('_blank'),
+                ->list([
+                    Link::make('Todos')
+                        ->route('platform.decisiones.report', ['filter' => 'todos'])
+                        ->target('_blank'),
+                    Link::make('Solo Estrellas')
+                        ->route('platform.decisiones.report', ['filter' => 'Estrella'])
+                        ->target('_blank'),
+                    Link::make('Solo Riesgos de Quiebre')
+                        ->route('platform.decisiones.report', ['filter' => 'Riesgo de Quiebre'])
+                        ->target('_blank'),
+                    Link::make('Solo Excesos')
+                        ->route('platform.decisiones.report', ['filter' => 'Exceso (Estancado)'])
+                        ->target('_blank'),
+                ]),
         ];
     }
 
@@ -164,16 +176,23 @@ class MLDecisionReportScreen extends Screen
     }
     
     // Función para el reporte en PDF
-    public function export()
+    public function export(\Illuminate\Http\Request $request)
     {
         $data = $this->query();
         $rows = $data['_allRows'] ?? [];
         
+        $filter = $request->query('filter', 'todos');
+        if ($filter !== 'todos') {
+            $rows = array_filter($rows, fn($r) => $r->decision === $filter);
+        }
+        
         $pdf = Pdf::loadView('orchid.decisiones.report', [
             'rows' => $rows,
-            'generatedAt' => now()
+            'generatedAt' => now(),
+            'filter' => $filter
         ])->setPaper('a4', 'portrait');
 
-        return $pdf->stream('reporte_decisiones_inteligentes.pdf');
+        $filename = 'reporte_decisiones_' . \Illuminate\Support\Str::slug($filter) . '.pdf';
+        return $pdf->stream($filename);
     }
 }

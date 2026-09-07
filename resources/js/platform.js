@@ -316,7 +316,10 @@ document.head.appendChild(style);
 // 6) Chatbot flotante global (usa /api/chatbot)
 (function(){
   const createChatUi = ()=>{
-    if(document.getElementById('aiChatToggle')) return;
+    const oldBtn = document.getElementById('aiChatToggle');
+    if(oldBtn) oldBtn.remove();
+    const oldPanel = document.getElementById('aiChatPanel');
+    if(oldPanel) oldPanel.remove();
 
     const btn = document.createElement('button');
     btn.id = 'aiChatToggle';

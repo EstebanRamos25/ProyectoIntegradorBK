@@ -161,7 +161,8 @@ class ProductoResource extends Resource
     {
         return [
             TD::make('Imagen')->render(function ($producto) {
-                $image = $producto->attachment('image')->first();
+                // Usar la imagen más reciente (mayor ID) para evitar mostrar imágenes antiguas
+                $image = $producto->attachment('image')->orderByDesc('attachments.id')->first();
                 $alt = e($producto->Nombre);
 
                 $imageUrl = null;
@@ -312,10 +313,31 @@ class ProductoResource extends Resource
             }
         }
 
-        $imageIds = (array) $request->input('image', []);
-        $imageIds = array_filter($imageIds, fn($v) => !empty($v));
+        // ── Manejo de imágenes ──────────────────────────────────────────────
+        // Normalizar IDs recibidos del Upload field
+        $imageIds = collect((array) $request->input('image', []))
+            ->flatten()
+            ->filter(fn($v) => !empty($v) && is_numeric($v))
+            ->map(fn($v) => (int) $v)
+            ->filter(fn($v) => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+
         if (!empty($imageIds)) {
-            $model->attachment()->sync($imageIds);
+            // Detectar IDs que ya estaban asociados vs IDs verdaderamente nuevos
+            $existingImageIds = $model->attachment('image')->pluck('attachments.id')->map(fn($id) => (int)$id)->toArray();
+            $newImageIds       = array_diff($imageIds, $existingImageIds);
+
+            if (!empty($newImageIds)) {
+                // Desasociar imágenes anteriores (solo del grupo 'image')
+                if (!empty($existingImageIds)) {
+                    $model->attachment()->detach($existingImageIds);
+                }
+                // Asociar solo la(s) imagen(es) nueva(s)
+                $model->attachment()->attach($newImageIds);
+            }
+            // Si $newImageIds está vacío → el usuario no subió imagen nueva → no hacer nada
         }
 
         Cache::forget('three.materials.catalog');

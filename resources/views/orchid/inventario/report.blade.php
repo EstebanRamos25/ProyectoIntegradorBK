@@ -134,8 +134,11 @@
     </style>
 </head>
 <body>
+    <div style="margin-bottom: 12px;">
+        <img src="{{ public_path('images/avodah_logo.png') }}" alt="AVODAH Logo" style="height: 35px;">
+    </div>
     <div class="hero">
-        <div class="eyebrow">Proyecto Integrador BK</div>
+        <div class="eyebrow">AVODAH</div>
         <h1>Reporte de inventarios</h1>
         <p class="subtitle">Resumen de existencias por lote y producto (cajas disponibles / entrada).</p>
         <div class="meta">

@@ -86,7 +86,7 @@ export function Controls({
         style={styles.topBar}
       >
         <div style={styles.topBarLeft}>
-          <span style={styles.appTitle}>CERABOL 3D</span>
+          <img src="/images/avodah_logo.png" alt="AVODAH 3D" style={{ height: '24px', objectFit: 'contain' }} />
           <div style={styles.divider} />
           
           {/* Surface Selector Pills */}
