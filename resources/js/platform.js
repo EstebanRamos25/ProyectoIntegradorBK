@@ -380,14 +380,18 @@ document.head.appendChild(style);
       return row;
     };
 
-    btn.addEventListener('click', ()=>{
-      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-      if(panel.style.display === 'flex'){
-        inputEl.focus();
-      }
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      panel.style.display = 'flex';
+      btn.style.display = 'none';
+      inputEl.focus();
     });
-    closeEl.addEventListener('click', ()=>{
+    closeEl.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
       panel.style.display = 'none';
+      btn.style.display = 'block';
     });
 
     formEl.addEventListener('submit', async (e)=>{

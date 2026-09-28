@@ -39,13 +39,12 @@ return [
         'model'   => env('OPENAI_MODEL', 'gpt-4.1-mini'),
     ],
 
-    'chatbot' => [
-        'provider' => env('CHAT_PROVIDER', 'ollama'),
+    'groq' => [
+        'api_key' => env('GROQ_API_KEY'),
+        'model'   => env('GROQ_MODEL', 'openai/gpt-oss-20b'),
     ],
 
-    'ollama' => [
-        'url'    => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
-        'model'  => env('OLLAMA_MODEL', 'llama3'),
-        'timeout'=> env('OLLAMA_TIMEOUT', 120),
+    'chatbot' => [
+        'provider' => env('CHAT_PROVIDER', 'groq'),
     ],
 ];
