@@ -105,30 +105,45 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
      Route::get('/3d', function() use ($disableViteHotIfNotReachable) {
           $disableViteHotIfNotReachable();
           $user = Auth::user();
+          $isAdmin = $user && (!method_exists($user, 'inRole') || !$user->inRole('client'));
           $scenes = collect();
+          $clientScenes = collect();
           $quotesByScene = collect();
           if ($user) {
                $scenes = ThreeScene::query()
                     ->where('user_id', $user->id)
                     ->orderByDesc('updated_at')
-                    ->get(['id', 'name', 'updated_at']);
+                    ->get(['id', 'user_id', 'name', 'updated_at']);
 
-                $sceneIds = $scenes->pluck('id')->all();
-                if (!empty($sceneIds)) {
+               if ($isAdmin) {
+                    $clientScenes = ThreeScene::query()
+                         ->with(['user:id,name,email'])
+                         ->where('user_id', '!=', $user->id)
+                         ->orderByDesc('updated_at')
+                         ->get(['id', 'user_id', 'name', 'updated_at']);
+               }
+
+               $sceneIds = $scenes->pluck('id')
+                    ->merge($clientScenes->pluck('id'))
+                    ->unique()
+                    ->all();
+
+               if (!empty($sceneIds)) {
                     $quotesByScene = ThreeQuote::query()
-                        ->where('user_id', $user->id)
-                        ->whereIn('three_scene_id', $sceneIds)
-                        ->orderByDesc('created_at')
-                        ->get()
-                        ->groupBy('three_scene_id')
-                        ->map(fn ($group) => $group->first());
-                }
+                         ->whereIn('three_scene_id', $sceneIds)
+                         ->orderByDesc('created_at')
+                         ->get()
+                         ->groupBy('three_scene_id')
+                         ->map(fn ($group) => $group->first());
+               }
           }
 
           return view('three.menu', [
                'scenes' => $scenes,
+               'clientScenes' => $clientScenes,
                'quotesByScene' => $quotesByScene,
                'user' => $user,
+               'isAdmin' => $isAdmin,
           ]);
      })->name('three.menu');
 
@@ -184,6 +199,9 @@ Route::group(['middleware' => ['web', 'auth']], function () {
     Route::put('/3d/scenes/{sceneId}', [ThreeSceneController::class, 'update'])
          ->whereNumber('sceneId')
          ->name('three.scenes.update');
+    Route::delete('/3d/scenes/{sceneId}', [ThreeSceneController::class, 'destroy'])
+         ->whereNumber('sceneId')
+         ->name('three.scenes.destroy');
 
     Route::get('testing/smoke', [TestingController::class, 'smoke'])
          ->name('testing.smoke');

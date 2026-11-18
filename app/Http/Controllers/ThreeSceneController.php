@@ -7,6 +7,8 @@ namespace App\Http\Controllers;
 use App\Models\ThreeScene;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Storage;
 
 class ThreeSceneController extends Controller
 {
@@ -28,11 +30,14 @@ class ThreeSceneController extends Controller
     public function show(Request $request, int $sceneId): JsonResponse
     {
         $user = $request->user();
+        $isAdmin = $user && (!method_exists($user, 'inRole') || !$user->inRole('client'));
 
-        $scene = ThreeScene::query()
-            ->where('user_id', $user->id)
-            ->where('id', $sceneId)
-            ->firstOrFail();
+        $query = ThreeScene::query()->where('id', $sceneId);
+        if (!$isAdmin) {
+            $query->where('user_id', $user->id);
+        }
+
+        $scene = $query->firstOrFail();
 
         return response()->json([
             'item' => [
@@ -104,5 +109,47 @@ class ThreeSceneController extends Controller
                 'created_at' => $scene->created_at,
             ],
         ]);
+    }
+
+    public function destroy(Request $request, int $sceneId): JsonResponse|RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        // Solo el propietario puede eliminar su propio proyecto
+        $scene = ThreeScene::query()
+            ->with('quotes')
+            ->where('user_id', $user->id)
+            ->where('id', $sceneId)
+            ->firstOrFail();
+
+        // Bloquear eliminación si ya tiene una cotización enviada o vendida
+        $hasSentOrSoldQuote = $scene->quotes->contains(function ($quote) {
+            return in_array($quote->status, ['sent', 'sold'], true);
+        });
+
+        if ($hasSentOrSoldQuote) {
+            $msg = 'No se puede eliminar este proyecto porque su cotización ya fue enviada al administrador o vendida.';
+            if ($request->wantsJson()) {
+                return response()->json(['message' => $msg], 422);
+            }
+            return redirect()->route('three.menu')->with('error', $msg);
+        }
+
+        // Limpiar archivos PDF en borrador si existen
+        foreach ($scene->quotes as $quote) {
+            if ($quote->pdf_path && Storage::disk('public')->exists($quote->pdf_path)) {
+                Storage::disk('public')->delete($quote->pdf_path);
+            }
+        }
+
+        $sceneName = $scene->name;
+        $scene->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json(['message' => 'Proyecto eliminado correctamente.']);
+        }
+
+        return redirect()->route('three.menu')->with('status', "El proyecto \"{$sceneName}\" fue eliminado correctamente.");
     }
 }

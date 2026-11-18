@@ -17,10 +17,14 @@ class ThreeQuoteController extends Controller
         $user = $request->user();
         abort_unless($user, 403);
 
-        $quote = ThreeQuote::query()
-            ->whereKey($quoteId)
-            ->where('user_id', $user->id)
-            ->firstOrFail();
+        $isAdmin = !method_exists($user, 'inRole') || !$user->inRole('client');
+
+        $query = ThreeQuote::query()->whereKey($quoteId);
+        if (!$isAdmin) {
+            $query->where('user_id', $user->id);
+        }
+
+        $quote = $query->firstOrFail();
 
         abort_unless($quote->pdf_path, 404);
         abort_unless(Storage::disk('public')->exists($quote->pdf_path), 404);

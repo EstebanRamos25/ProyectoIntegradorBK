@@ -16,14 +16,14 @@ function MiniViewer({ textureUrl, roughness, metalness, timeOfDay, intensity }) 
   return (
     <>
       <color attach="background" args={['#0f172a']} />
-      
+
       {/* Luces del visor que imitan la hora del día pero siempre visibles */}
       <SunLight timeOfDay={timeOfDay} intensity={intensity * 1.5} />
       <ambientLight intensity={0.4} />
 
       <mesh position={[0, -0.2, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.5, 0.4, 2.5]} />
-        <meshStandardMaterial 
+        <meshStandardMaterial
           map={map}
           color={map ? '#ffffff' : '#475569'}
           roughness={roughness}
@@ -32,7 +32,7 @@ function MiniViewer({ textureUrl, roughness, metalness, timeOfDay, intensity }) 
       </mesh>
 
       <ContactShadows position={[0, -0.4, 0]} opacity={0.7} scale={5} blur={1.5} far={1} />
-      <OrbitControls autoRotate autoRotateSpeed={1.5} enableZoom={false} minPolarAngle={0.5} maxPolarAngle={Math.PI/2.1} />
+      <OrbitControls autoRotate autoRotateSpeed={1.5} enableZoom={false} minPolarAngle={0.5} maxPolarAngle={Math.PI / 2.1} />
       <Environment preset={getEnvironmentPreset(timeOfDay)} background={false} />
     </>
   )
@@ -49,8 +49,10 @@ export function RightSidebar({
   installedWall,
   floorCoverage,
   wallCoverage,
-  coverSolid,
-  onToggleCoverSolid,
+  floorCoverSolid = false,
+  onToggleFloorCoverSolid,
+  wallCoverSolid = false,
+  onToggleWallCoverSolid,
   timeOfDay,
   lightIntensity,
   onApplyFloor,
@@ -59,7 +61,6 @@ export function RightSidebar({
   onCancelPreviewWall,
   onRemoveFloor,
   onRemoveWall,
-  activeSurface
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const currencyFormatter = new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' })
@@ -69,9 +70,11 @@ export function RightSidebar({
     if (!mat) return null
     const price = mat.price_per_m2 ? Number(mat.price_per_m2) : 0
     const roughness = mat.kind === 'plank' ? 0.75 : 0.65
+    const isSolid = isWallCoverage ? wallCoverSolid : floorCoverSolid
+    const onToggleSolid = isWallCoverage ? onToggleWallCoverSolid : onToggleFloorCoverSolid
 
     return (
-      <div style={styles.blockContainer}>
+      <div style={{ ...styles.blockContainer, position: 'relative' }}>
         <div style={styles.blockLabel}>{label}</div>
         <div style={{ ...styles.viewerBox, height: 140 }}>
           <Canvas shadows camera={{ position: [2.5, 2, 2.5], fov: 45 }}>
@@ -88,7 +91,7 @@ export function RightSidebar({
           {mat.piece_dimensions_cm && (
             <div style={styles.detailsRow}>
               <span>Dimensiones:</span>
-              <strong>{mat.piece_dimensions_cm.width}x{mat.piece_dimensions_cm.depth} cm</strong>
+              <strong>{mat.piece_dimensions_cm.width || (mat.kind === 'plank' ? 120 : 60)}x{mat.piece_dimensions_cm.depth || (mat.kind === 'plank' ? 20 : 60)} cm</strong>
             </div>
           )}
 
@@ -97,19 +100,21 @@ export function RightSidebar({
             <div style={{ marginTop: 12, padding: 12, background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
               <div style={styles.coverageHeader}>
                 <span>📊 Cobertura</span>
-                {/* Solamente mostramos el botón de grilla si es la superficie activa para no cruzar el estado global */}
-                {((isWallCoverage && activeSurface === 'walls') || (!isWallCoverage && activeSurface === 'floor')) && (
-                  <button onClick={onToggleCoverSolid} style={{...styles.toggleBtn, ...(coverSolid ? styles.toggleBtnSolid : {})}}>
-                    {coverSolid ? '🧱 Sólido' : '🔲 Grilla'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={onToggleSolid}
+                  style={{ ...styles.toggleBtn, ...(isSolid ? styles.toggleBtnSolid : {}) }}
+                  title="Cambiar entre vista Grilla (con juntas) y vista Sólida continua"
+                >
+                  {isSolid ? '🧱 Sólido' : '🔲 Grilla'}
+                </button>
               </div>
               <div style={styles.coverageBox}>
                 <div style={styles.infoRow}><span>Área total:</span><strong>{(isWallCoverage ? covData.wallAreaM2 : covData.floorAreaM2)?.toFixed(2)} m²</strong></div>
                 <div style={styles.infoRow}><span>Área por pieza:</span><strong>{covData.pieceAreaM2?.toFixed(4)} m²</strong></div>
                 <div style={styles.highlightBox}>
                   <div style={styles.highlightTitle}>Total Piezas Estimadas</div>
-                  <div style={styles.highlightValue}>{isWallCoverage ? covData.estimatedUnits : covData.count} <span style={{fontSize: 14}}>unidades</span></div>
+                  <div style={styles.highlightValue}>{isWallCoverage ? covData.estimatedUnits : covData.count} <span style={{ fontSize: 14 }}>unidades</span></div>
                 </div>
               </div>
             </div>
@@ -142,8 +147,8 @@ export function RightSidebar({
       <div style={styles.installedScroll}>
         {/* FLOOR SECTION */}
         {previewFloor ? renderMaterialBlock(
-          previewFloor, 
-          'Previsualizando Piso', 
+          previewFloor,
+          'Previsualizando Piso',
           <>
             <button style={styles.btnCancel} onClick={onCancelPreviewFloor}>Cancelar</button>
             <button style={styles.btnApply} onClick={onApplyFloor}>Aplicar al Piso</button>
@@ -151,8 +156,8 @@ export function RightSidebar({
           floorCoverage,
           false
         ) : installedFloor ? renderMaterialBlock(
-          installedFloor, 
-          'Piso Instalado', 
+          installedFloor,
+          'Piso Instalado',
           <button style={styles.btnRemove} onClick={onRemoveFloor}>Quitar del Piso</button>,
           floorCoverage,
           false
@@ -160,8 +165,8 @@ export function RightSidebar({
 
         {/* WALL SECTION */}
         {previewWall ? renderMaterialBlock(
-          previewWall, 
-          'Previsualizando Paredes', 
+          previewWall,
+          'Previsualizando Paredes',
           <>
             <button style={styles.btnCancel} onClick={onCancelPreviewWall}>Cancelar</button>
             <button style={styles.btnApply} onClick={onApplyWall}>Aplicar a Paredes</button>
@@ -169,8 +174,8 @@ export function RightSidebar({
           wallCoverage,
           true
         ) : installedWall ? renderMaterialBlock(
-          installedWall, 
-          'Paredes Instaladas', 
+          installedWall,
+          'Paredes Instaladas',
           <button style={styles.btnRemove} onClick={onRemoveWall}>Quitar de Paredes</button>,
           wallCoverage,
           true

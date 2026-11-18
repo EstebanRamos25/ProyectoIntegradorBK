@@ -25,7 +25,7 @@ import { SurfaceMaterial } from './components/SurfaceMaterial'
 import { Floor } from './components/Floor'
 import { Controls } from './components/Controls'
 import { RendererSetup, PostFX } from './components/PostFX'
-import { CoverPreview, WallPiecePreview, WallCoverPreview } from './components/CoverPreviews'
+import { CoverPreview, WallCoverPreview } from './components/CoverPreviews'
 import { RightSidebar } from './components/RightSidebar'
 import { DynamicSpot } from './components/DynamicSpot'
 import { SunLight, getEnvironmentPreset } from './components/SunLight'
@@ -34,12 +34,31 @@ import { LightingPanel } from './components/LightingPanel'
 import { useRecommendations } from './hooks/useRecommendations'
 import { ToastProvider, useToast } from './components/Toast'
 import { WindowMesh } from './components/WindowMesh'
+import {
+  createPresetGrid,
+  normalizeGrid,
+  computeFloorMetrics,
+  computeWallSegments,
+} from './roomGeometry'
 
 const WHITE_TEX_DATA_URL =
   'data:image/svg+xml;utf8,' +
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ffffff"/></svg>'
   )
+
+function getMaterialDimsCm(material) {
+  const dims = material?.piece_dimensions_cm
+  const defaultW = material?.kind === 'plank' ? 120 : 60
+  const defaultD = material?.kind === 'plank' ? 20 : 60
+  const w = Number(dims?.width || 0)
+  const d = Number(dims?.depth || 0)
+  return {
+    width: Number.isFinite(w) && w > 0 ? w : defaultW,
+    depth: Number.isFinite(d) && d > 0 ? d : defaultD,
+    locked: !!dims?.locked,
+  }
+}
 
 // Componentes extraidos a components/
 function Demo() {
@@ -53,7 +72,8 @@ function Demo() {
   const [dofOn, setDofOn] = useState(false)
   const [timeOfDay, setTimeOfDay] = useState(10)
   const [lightIntensity, setLightIntensity] = useState(1.0)
-  const [coverSolid, setCoverSolid] = useState(false)
+  const [floorCoverSolid, setFloorCoverSolid] = useState(false)
+  const [wallCoverSolid, setWallCoverSolid] = useState(false)
   const [materials, setMaterials] = useState([])
   const [materialsLoading, setMaterialsLoading] = useState(true)
   const [materialsError, setMaterialsError] = useState(null)
@@ -64,7 +84,46 @@ function Demo() {
   const [wallPieces, setWallPieces] = useState([])
   const [roomSizeCm, setRoomSizeCm] = useState({ width: 1000, depth: 1000, height: 300 })
   const [roomShape, setRoomShape] = useState('rectangular')
+  const [customGrid, setCustomGrid] = useState(() => createPresetGrid('rectangular'))
+  const [wallViewMode, setWallViewMode] = useState('full') // 'full' | 'half' | 'hidden'
+  const [hiddenWallIds, setHiddenWallIds] = useState([])
+  const [interiorWalls, setInteriorWalls] = useState([])
   const [windows, setWindows] = useState([])
+
+  const handleRoomShapeChange = useCallback((nextShape) => {
+    setRoomShape(nextShape)
+    setCustomGrid(createPresetGrid(nextShape))
+    setHiddenWallIds([])
+  }, [])
+
+  const handleCustomGridChange = useCallback((nextGrid) => {
+    setCustomGrid(normalizeGrid(nextGrid, 'rectangular'))
+    setRoomShape('custom')
+  }, [])
+
+  const addInteriorWall = useCallback(() => {
+    const id = Date.now() + Math.floor(Math.random() * 1000)
+    setInteriorWalls((prev) => [
+      ...prev,
+      {
+        id,
+        axis: 'x',
+        row: 5,
+        col: 5,
+        lengthCells: 4,
+      },
+    ])
+  }, [])
+
+  const updateInteriorWall = useCallback((id, patch) => {
+    setInteriorWalls((prev) =>
+      prev.map((iw) => (iw.id === id ? { ...iw, ...patch } : iw))
+    )
+  }, [])
+
+  const removeInteriorWall = useCallback((id) => {
+    setInteriorWalls((prev) => prev.filter((iw) => iw.id !== id))
+  }, [])
 
   const addWindow = useCallback((wallKey) => {
     const id = Date.now() + Math.floor(Math.random() * 1000)
@@ -100,6 +159,7 @@ function Demo() {
   const lastEmissive = useRef({ obj: null, color: null })
   const controlsRef = useRef(null)
   const r3fRef = useRef({ gl: null, scene: null })
+  const initialUrlHandledRef = useRef(false)
 
   const trackEvent = useCallback(async (eventType, { productId = null, value = null, meta = null } = {}) => {
     if (!selectedSceneId) return
@@ -143,6 +203,22 @@ function Demo() {
     }),
     [roomSizeCm]
   )
+
+  const floorMetrics = useMemo(
+    () => computeFloorMetrics(customGrid, roomSize),
+    [customGrid, roomSize]
+  )
+
+  const wallGeometry = useMemo(
+    () => computeWallSegments(customGrid, roomSize, roomShape, interiorWalls),
+    [customGrid, roomSize, roomShape, interiorWalls]
+  )
+
+  const wallHeightFactor = useMemo(() => {
+    if (wallViewMode === 'hidden') return 0
+    if (wallViewMode === 'half') return 0.42
+    return 1.0
+  }, [wallViewMode])
 
   const wallThickness = 0.12
 
@@ -268,13 +344,12 @@ function Demo() {
 
   const activeFloorPiece = useMemo(() => {
     if (previewFloorMaterial) {
-      const dims = previewFloorMaterial.piece_dimensions_cm
-      const wCm = Number(dims?.width || 0)
-      const dCm = Number(dims?.depth || 0)
+      const dims = getMaterialDimsCm(previewFloorMaterial)
       return {
         id: 'preview-floor',
+        kind: previewFloorMaterial.kind === 'plank' ? 'plank' : 'tile',
         material: previewFloorMaterial,
-        size: [wCm / 100, 0.12, dCm / 100],
+        size: [dims.width / 100, 0.12, dims.depth / 100],
         scaleXZ: { x: 1, z: 1 },
         textureUrl: previewFloorMaterial.image_url,
         roughness: previewFloorMaterial.kind === 'plank' ? 0.75 : 0.65,
@@ -286,13 +361,13 @@ function Demo() {
 
   const activeWallPiece = useMemo(() => {
     if (previewWallMaterial) {
-      const wCm = Number(previewWallMaterial.piece_dimensions_cm?.width || 0)
-      const dCm = Number(previewWallMaterial.piece_dimensions_cm?.depth || 0)
+      const dims = getMaterialDimsCm(previewWallMaterial)
       return {
         id: 'preview-wall',
+        kind: previewWallMaterial.kind === 'plank' ? 'plank' : 'tile',
         material: previewWallMaterial,
-        width_cm: wCm,
-        depth_cm: dCm,
+        width_cm: dims.width,
+        depth_cm: dims.depth,
         textureUrl: previewWallMaterial.image_url,
         roughness: previewWallMaterial.kind === 'plank' ? 0.75 : 0.65,
         metalness: 0.0,
@@ -304,20 +379,21 @@ function Demo() {
   const handleUseRecommendation = useCallback((productId) => {
     if (!productId) return
     if (activeSurface === 'walls') {
-      setSelectedWallMaterialId(productId)
+      handleSelectWallMaterial(productId)
     } else {
-      setSelectedMaterialId(productId)
+      handleSelectMaterial(productId)
     }
     trackEvent('recommendation_click', { productId, meta: { surface: activeSurface, wall: activeWallKey } })
-  }, [activeSurface, activeWallKey, trackEvent])
+  }, [activeSurface, activeWallKey, trackEvent, handleSelectWallMaterial, handleSelectMaterial])
 
   const wallCoverageData = useMemo(() => {
     if (!activeWallPiece) return { canCompute: false, computed: false }
-    const wallAreaM2 = 2 * (roomSize.width + roomSize.depth) * roomSize.height
+    const wallAreaM2 = wallGeometry.totalWallAreaM2
     if (!Number.isFinite(wallAreaM2) || wallAreaM2 <= 0) return { canCompute: false, computed: false }
 
-    const wCm = Number(activeWallPiece.width_cm || 0)
-    const dCm = Number(activeWallPiece.depth_cm || 0)
+    const dims = getMaterialDimsCm(activeWallPiece.material)
+    const wCm = Number(activeWallPiece.width_cm || dims.width || 60)
+    const dCm = Number(activeWallPiece.depth_cm || dims.depth || 60)
     if (!Number.isFinite(wCm) || !Number.isFinite(dCm) || wCm <= 0 || dCm <= 0) {
       return { canCompute: false, computed: false }
     }
@@ -334,13 +410,18 @@ function Demo() {
       pieceCmX: wCm,
       pieceCmZ: dCm,
     }
-  }, [activeWallPiece, roomSize])
+  }, [activeWallPiece, wallGeometry.totalWallAreaM2])
 
   const buildScenePayload = useCallback(() => {
     return {
-      version: 1,
+      version: 2,
       floor,
       roomShape,
+      customGrid,
+      interiorWalls,
+      wallViewMode,
+      floorCoverSolid,
+      wallCoverSolid,
       windows,
       roomSizeCm,
       selectedMaterialId,
@@ -351,7 +432,6 @@ function Demo() {
         width_cm: wallPiece.width_cm,
         depth_cm: wallPiece.depth_cm,
         activeWallKey,
-
       } : null,
       pieces: pieces.map((p) => ({
         kind: p.kind,
@@ -363,15 +443,36 @@ function Demo() {
         lockSizeXZ: !!p.lockSizeXZ,
       })),
     }
-  }, [floor, roomShape, windows, roomSizeCm, selectedMaterialId, selectedWallMaterialId, pieces, wallPiece, activeWallKey])
+  }, [
+    floor,
+    roomShape,
+    customGrid,
+    interiorWalls,
+    wallViewMode,
+    floorCoverSolid,
+    wallCoverSolid,
+    windows,
+    roomSizeCm,
+    selectedMaterialId,
+    selectedWallMaterialId,
+    pieces,
+    wallPiece,
+    activeWallKey,
+  ])
 
   const resetSceneState = useCallback(() => {
     setSelectedSceneId(null)
     setSceneName('')
     setPieces([])
     setWallPieces([])
+    setPreviewFloorMaterial(null)
+    setPreviewWallMaterial(null)
     setWindows([])
+    setInteriorWalls([])
+    setHiddenWallIds([])
+    setWallViewMode('full')
     setRoomShape('rectangular')
+    setCustomGrid(createPresetGrid('rectangular'))
     setSelected(null)
 
     window.localStorage.removeItem('three.lastSceneId')
@@ -380,9 +481,21 @@ function Demo() {
   const hydrateScene = useCallback((sceneData) => {
     if (!sceneData || typeof sceneData !== 'object') return
     setFloor(sceneData.floor === 'ceramic' ? 'ceramic' : 'wood')
+    setPreviewFloorMaterial(null)
+    setPreviewWallMaterial(null)
 
-    if (sceneData.roomShape) {
-      setRoomShape(sceneData.roomShape)
+    const loadedShape = sceneData.roomShape || 'rectangular'
+    setRoomShape(loadedShape)
+    setCustomGrid(normalizeGrid(sceneData.customGrid, loadedShape))
+    setInteriorWalls(Array.isArray(sceneData.interiorWalls) ? sceneData.interiorWalls : [])
+    setWallViewMode(sceneData.wallViewMode || 'full')
+    setHiddenWallIds([])
+
+    if (typeof sceneData.floorCoverSolid === 'boolean') {
+      setFloorCoverSolid(sceneData.floorCoverSolid)
+    }
+    if (typeof sceneData.wallCoverSolid === 'boolean') {
+      setWallCoverSolid(sceneData.wallCoverSolid)
     }
 
     if (Array.isArray(sceneData.windows)) {
@@ -418,24 +531,22 @@ function Demo() {
       setSelectedWallMaterialId(Number(sceneData.selectedWallMaterialId))
     }
 
-
-
     const wallData = sceneData.wall && typeof sceneData.wall === 'object' ? sceneData.wall : null
     if (wallData) {
       if (wallData.activeWallKey) {
         setActiveWallKey(String(wallData.activeWallKey))
       }
 
-
-      const wallMaterial = materials.find((m) => Number(m.id) === Number(wallData.material_id)) ?? selectedWallMaterial
-      const wCm = Number(wallData.width_cm || 0)
-      const dCm = Number(wallData.depth_cm || 0)
+      const wallMaterial = materials.find((m) => Number(m.id) === Number(wallData.material_id)) ?? null
+      const dims = getMaterialDimsCm(wallMaterial)
+      const wCm = Number(wallData.width_cm || dims.width || 60)
+      const dCm = Number(wallData.depth_cm || dims.depth || 60)
       if (wallMaterial && wCm > 0 && dCm > 0) {
         const id = nextId.current++
         setWallPieces([
           {
             id,
-            kind: wallMaterial.kind,
+            kind: wallMaterial.kind === 'plank' ? 'plank' : 'tile',
             material: wallMaterial,
             name: `ParedPieza-${id}`,
             width_cm: wCm,
@@ -458,18 +569,18 @@ function Demo() {
       return
     }
 
-    // (MVP) el editor actualmente maneja 1 pieza: cargamos la primera.
     const raw = nextPieces[0]
-    const material = materials.find((m) => Number(m.id) === Number(raw?.material_id)) ?? selectedMaterial
+    const material = materials.find((m) => Number(m.id) === Number(raw?.material_id)) ?? null
+    const dims = getMaterialDimsCm(material)
     const id = nextId.current++
     const piece = {
       id,
-      kind: raw?.kind === 'plank' ? 'plank' : 'tile',
+      kind: raw?.kind === 'plank' || material?.kind === 'plank' ? 'plank' : 'tile',
       material: material ?? null,
       name: `Pieza-${id}`,
       position: Array.isArray(raw?.position) ? raw.position : [0, roomLimits.y, 0],
       rotation: Array.isArray(raw?.rotation) ? raw.rotation : [0, 0, 0],
-      size: Array.isArray(raw?.size) ? raw.size : (material?.kind === 'plank' ? [1.8, 0.12, 0.5] : [1.0, 0.12, 1.0]),
+      size: Array.isArray(raw?.size) ? raw.size : [dims.width / 100, 0.12, dims.depth / 100],
       scaleXZ: raw?.scaleXZ && typeof raw.scaleXZ === 'object' ? raw.scaleXZ : { x: 1, z: 1 },
       lockSizeXZ: !!raw?.lockSizeXZ,
       textureUrl: material?.image_url || WHITE_TEX_DATA_URL,
@@ -478,7 +589,7 @@ function Demo() {
     }
     setPieces([piece])
     setSelected(null)
-  }, [materials, selectedMaterial, selectedWallMaterial, roomLimits.y])
+  }, [materials, roomLimits.y])
 
   // Si se seleccionó un escenario antes de cargar materiales, diferimos la hidratación.
   useEffect(() => {
@@ -525,9 +636,12 @@ function Demo() {
       console.error(err)
       toast('No se pudo cargar el escenario.', { type: 'error' })
     }
-  }, [materialsLoading, hydrateScene])
+  }, [materialsLoading, hydrateScene, toast])
 
   useEffect(() => {
+    if (initialUrlHandledRef.current) return
+    initialUrlHandledRef.current = true
+
     const params = new URLSearchParams(window.location.search)
     const isNew = params.get('new') === '1'
     const sceneIdParam = params.get('sceneId')
@@ -536,6 +650,9 @@ function Demo() {
     if (isNew) {
       autoLoadedSceneRef.current = true
       resetSceneState()
+      if (window.history?.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
       return
     }
 
@@ -667,17 +784,14 @@ function Demo() {
   const quotePiece = useMemo(() => activeFloorPiece, [activeFloorPiece])
 
   const hasValidPieceDims = useCallback((material) => {
-    const dims = material?.piece_dimensions_cm
-    const w = Number(dims?.width || 0)
-    const d = Number(dims?.depth || 0)
-    return Number.isFinite(w) && Number.isFinite(d) && w > 0 && d > 0
+    return !!material
   }, [])
 
   const inventoryStatus = useMemo(() => {
-    const material = quotePiece?.material ?? selectedMaterial
+    const material = quotePiece?.material ?? activeWallPiece?.material ?? selectedMaterial
     if (!material) return { canCompute: false }
 
-    const floorAreaM2 = (roomSizeCm.width / 100) * (roomSizeCm.depth / 100)
+    const floorAreaM2 = floorMetrics.floorAreaM2
     const m2PerBox = Number(material?.packaging?.m2_per_box || 0)
     const liveInv = inventoryLive && material?.id != null ? inventoryLive[String(material.id)] : null
     const rawBoxes = liveInv?.boxes_available_total ?? material?.inventory?.boxes_available_total
@@ -726,7 +840,7 @@ function Demo() {
       canSingleLot,
       bestLotCode: bestLot?.lot_code ?? null,
     }
-  }, [quotePiece, selectedMaterial, roomSizeCm, inventoryLive])
+  }, [quotePiece, activeWallPiece, selectedMaterial, floorMetrics.floorAreaM2, inventoryLive])
 
   const quoteProductId = quotePiece?.material?.id ?? null
   const wallProductId = activeWallPiece?.material?.id ?? null
@@ -930,7 +1044,7 @@ function Demo() {
       z: quoteSizeCm.z / 100,
     }
     const pieceAreaM2 = pieceM.x * pieceM.z
-    const floorAreaM2 = roomSize.width * roomSize.depth
+    const floorAreaM2 = floorMetrics.floorAreaM2
     if (!Number.isFinite(pieceAreaM2) || pieceAreaM2 <= 0) return { canCompute: false, computed: false }
 
     const count = Math.ceil(floorAreaM2 / pieceAreaM2)
@@ -943,7 +1057,7 @@ function Demo() {
       floorAreaM2,
       count,
     }
-  }, [quotePiece, quoteSizeCm, roomSize])
+  }, [quotePiece, quoteSizeCm, floorMetrics.floorAreaM2])
 
 
 
@@ -1007,114 +1121,126 @@ function Demo() {
   )
 
   const quoteSummary = useMemo(() => {
-    if (!quotePiece || !quoteSizeCm || !quotePiece?.material) {
+    const hasFloor = !!(quotePiece && quoteSizeCm && quotePiece?.material)
+    const hasWall = !!(activeWallPiece && activeWallPiece?.material && wallCoverageData?.computed)
+
+    if (!hasFloor && !hasWall) {
       return { ready: false }
     }
 
-    const material = quotePiece.material
+    const floorAreaM2 = floorMetrics.floorAreaM2
+    let floorTotal = 0
+    let floorUnitPriceM2 = 0
+    let pieceAreaM2 = 0
+    let estimatedUnits = 0
+    let itemLabel = ''
 
-    const floorAreaM2 = roomSize.width * roomSize.depth
-    const pieceAreaM2 = (quoteSizeCm.x / 100) * (quoteSizeCm.z / 100)
-    const estimatedUnits = Math.max(1, Math.ceil(floorAreaM2 / Math.max(pieceAreaM2, 0.0001)))
-    const unitPriceM2 = Number(material.price_per_m2 || 0)
-    const total = floorAreaM2 * unitPriceM2
+    if (hasFloor) {
+      const material = quotePiece.material
+      itemLabel = material.name
+      pieceAreaM2 = (quoteSizeCm.x / 100) * (quoteSizeCm.z / 100)
+      estimatedUnits = Math.max(1, Math.ceil(floorAreaM2 / Math.max(pieceAreaM2, 0.0001)))
+      floorUnitPriceM2 = Number(material.price_per_m2 || 0)
+      floorTotal = floorAreaM2 * floorUnitPriceM2
+    }
+
+    let wallTotal = 0
+    let wallItemLabel = ''
+    const wallAreaM2 = wallGeometry.totalWallAreaM2
+
+    if (hasWall) {
+      const wallMat = activeWallPiece.material
+      wallItemLabel = wallMat.name
+      const wallUnitPriceM2 = Number(wallMat.price_per_m2 || 0)
+      wallTotal = wallAreaM2 * wallUnitPriceM2
+    }
+
+    const total = floorTotal + wallTotal
 
     return {
       ready: true,
-      itemLabel: material.name,
+      hasFloor,
+      hasWall,
+      itemLabel: itemLabel || wallItemLabel,
+      wallItemLabel,
       floorAreaM2,
+      wallAreaM2,
       pieceAreaM2,
       estimatedUnits,
-      unitPriceM2,
+      unitPriceM2: floorUnitPriceM2,
       total,
       floorAreaLabel: `${floorAreaM2.toFixed(2)} m²`,
-      unitPriceLabel: currencyFormatter.format(unitPriceM2),
+      wallAreaLabel: `${wallAreaM2.toFixed(2)} m²`,
+      floorSubtotalLabel: currencyFormatter.format(floorTotal),
+      wallSubtotalLabel: currencyFormatter.format(wallTotal),
+      unitPriceLabel: currencyFormatter.format(floorUnitPriceM2),
       totalLabel: currencyFormatter.format(total),
     }
-  }, [quotePiece, quoteSizeCm, roomSize, currencyFormatter])
+  }, [quotePiece, quoteSizeCm, activeWallPiece, wallCoverageData, floorMetrics.floorAreaM2, wallGeometry.totalWallAreaM2, currencyFormatter])
 
   const hasPiece = pieces.length > 0
-  const canAdd = !materialsLoading && !materialsError && !!selectedMaterial && hasValidPieceDims(selectedMaterial)
+  const canAdd = !materialsLoading && !materialsError && !!selectedMaterial
   const addLabel = hasPiece ? 'Reemplazar pieza' : 'Agregar pieza'
 
-  const addOnePiece = useCallback(async () => {
-    if (!selectedMaterial) return
-    if (!hasValidPieceDims(selectedMaterial)) {
-      toast('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.', { type: 'warning', duration: 5000 })
-      return
-    }
-    if (hasPiece) {
-      // Auto-replace without prompt for smoother UX
-      // We just overwrite
-    }
-    const id = nextId.current++
+  const addOnePiece = useCallback((materialOverride = null) => {
+    const targetMaterial = (materialOverride && materialOverride.id) ? materialOverride : selectedMaterial
+    if (!targetMaterial) return false
 
-    const dims = selectedMaterial?.piece_dimensions_cm
-    const wCm = Number(dims?.width || 0)
-    const dCm = Number(dims?.depth || 0)
-    const useDimsSize = [wCm / 100, 0.12, dCm / 100]
-    const lockFromProduct = !!dims?.locked
+    const id = nextId.current++
+    const dims = getMaterialDimsCm(targetMaterial)
+    const useDimsSize = [dims.width / 100, 0.12, dims.depth / 100]
 
     const piece = {
       id,
-      kind: selectedMaterial.kind,
-      material: selectedMaterial,
+      kind: targetMaterial.kind === 'plank' ? 'plank' : 'tile',
+      material: targetMaterial,
       name: `Pieza-${id}`,
       position: [0, roomLimits.y, 0],
       rotation: [0, 0, 0],
       size: useDimsSize,
       scaleXZ: { x: 1, z: 1 },
-      lockSizeXZ: lockFromProduct,
-      textureUrl: selectedMaterial.image_url,
-      roughness: selectedMaterial.kind === 'plank' ? 0.75 : 0.65,
+      lockSizeXZ: dims.locked,
+      textureUrl: targetMaterial.image_url,
+      roughness: targetMaterial.kind === 'plank' ? 0.75 : 0.65,
       metalness: 0.0,
     }
     setPieces([piece])
-    // Selección y enfoque: se asigna tras mount por referencia del evento de click.
+    setSelectedMaterialId(targetMaterial.id)
     setSelected(null)
-  }, [selectedMaterial, hasPiece, pieces, roomLimits.y, hasValidPieceDims])
+    return true
+  }, [selectedMaterial, roomLimits.y])
 
   const hasWallPiece = wallPieces.length > 0
-  const canAddWalls = !materialsLoading && !materialsError && !!selectedWallMaterial && hasValidPieceDims(selectedWallMaterial)
+  const canAddWalls = !materialsLoading && !materialsError && !!selectedWallMaterial
   const addLabelWalls = hasWallPiece ? 'Reemplazar pieza' : 'Agregar pieza'
 
-  const addOneWallPiece = useCallback(async () => {
-    if (!selectedWallMaterial) return
-    if (hasWallPiece) {
-      // Auto-replace without prompt
-    }
+  const addOneWallPiece = useCallback((materialOverride = null) => {
+    const targetMaterial = (materialOverride && materialOverride.id) ? materialOverride : selectedWallMaterial
+    if (!targetMaterial) return false
 
-    if (!hasValidPieceDims(selectedWallMaterial)) {
-      toast('Este material no tiene dimensiones de pieza configuradas (ancho/largo). Actualízalo en Productos para poder usarlo.', { type: 'warning', duration: 5000 })
-      return
-    }
-
-    const dims = selectedWallMaterial?.piece_dimensions_cm
-    const wCm = Number(dims?.width || 0)
-    const dCm = Number(dims?.depth || 0)
-
+    const dims = getMaterialDimsCm(targetMaterial)
     const id = nextId.current++
     const piece = {
       id,
-      kind: selectedWallMaterial.kind,
-      material: selectedWallMaterial,
+      kind: targetMaterial.kind === 'plank' ? 'plank' : 'tile',
+      material: targetMaterial,
       name: `ParedPieza-${id}`,
-      width_cm: wCm,
-      depth_cm: dCm,
+      width_cm: dims.width,
+      depth_cm: dims.depth,
       wallKey: activeWallKey,
-      textureUrl: selectedWallMaterial.image_url || WHITE_TEX_DATA_URL,
-      roughness: selectedWallMaterial.kind === 'plank' ? 0.75 : 0.65,
+      textureUrl: targetMaterial.image_url || WHITE_TEX_DATA_URL,
+      roughness: targetMaterial.kind === 'plank' ? 0.75 : 0.65,
       metalness: 0.0,
     }
 
     setWallPieces([piece])
+    setSelectedWallMaterialId(targetMaterial.id)
     setSelected(null)
-  }, [selectedWallMaterial, hasWallPiece, wallPieces, activeWallKey, hasValidPieceDims])
-
-
+    return true
+  }, [selectedWallMaterial, activeWallKey])
 
   const handleGenerateQuote = useCallback(async () => {
-    if (!quoteSummary?.ready || !quotePiece || !quoteSizeCm || quoteLoading) return
+    if (!quoteSummary?.ready || quoteLoading) return
 
     let sceneId = selectedSceneId
     if (!sceneId) {
@@ -1125,10 +1251,10 @@ function Demo() {
     if (inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false) {
       const ok = await confirm(
         `Stock insuficiente según inventario (en tiempo real).\n\n` +
-          `Requiere: ${inventoryStatus.boxesRequired} cajas\n` +
-          `Disponibles: ${inventoryStatus.boxesAvailableTotal} cajas\n` +
-          `Faltan: ${inventoryStatus.missingBoxes} cajas\n\n` +
-          `¿Deseas generar la cotización igual? (No descuenta inventario; la validación final será en Venta).`
+        `Requiere: ${inventoryStatus.boxesRequired} cajas\n` +
+        `Disponibles: ${inventoryStatus.boxesAvailableTotal} cajas\n` +
+        `Faltan: ${inventoryStatus.missingBoxes} cajas\n\n` +
+        `¿Deseas generar la cotización igual? (No descuenta inventario; la validación final será en Venta).`
       )
       if (!ok) return
     }
@@ -1145,6 +1271,13 @@ function Demo() {
       }
 
       trackEvent('quote_generate', { meta: { has_stock_warning: inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false } })
+
+      // Ajustar largo efectivo al área real de la cuadrícula personalizada para que el PDF coincida en m²
+      const effectiveDepthCm = Math.max(200, Math.min(3000, Math.round(roomSizeCm.depth * floorMetrics.activeRatio)))
+      const fallbackPieceKind = quotePiece?.kind || activeWallPiece?.kind || 'tile'
+      const fallbackWidthCm = quoteSizeCm?.x || activeWallPiece?.width_cm || 60
+      const fallbackDepthCm = quoteSizeCm?.z || activeWallPiece?.depth_cm || 60
+      const fallbackHeightCm = quoteSizeCm?.y || 12
 
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
       const response = await fetch('/3d/quotation', {
@@ -1165,22 +1298,22 @@ function Demo() {
             material_id: activeWallPiece?.material?.id ?? null,
             piece: activeWallPiece
               ? {
-                  kind: activeWallPiece.kind,
-                  width_cm: activeWallPiece.width_cm,
-                  depth_cm: activeWallPiece.depth_cm,
-                }
+                kind: activeWallPiece.kind === 'plank' ? 'plank' : 'tile',
+                width_cm: activeWallPiece.width_cm,
+                depth_cm: activeWallPiece.depth_cm,
+              }
               : null,
           },
           room: {
             width_cm: roomSizeCm.width,
-            depth_cm: roomSizeCm.depth,
+            depth_cm: effectiveDepthCm,
             height_cm: roomSizeCm.height,
           },
           piece: {
-            kind: quotePiece.kind,
-            width_cm: quoteSizeCm.x,
-            depth_cm: quoteSizeCm.z,
-            height_cm: quoteSizeCm.y,
+            kind: fallbackPieceKind === 'plank' ? 'plank' : 'tile',
+            width_cm: fallbackWidthCm,
+            depth_cm: fallbackDepthCm,
+            height_cm: fallbackHeightCm,
           },
         }),
       })
@@ -1209,7 +1342,7 @@ function Demo() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, inventoryStatus, captureTopDownSnapshot, activeWallPiece, sceneName, selectedSceneId, trackEvent, saveScene])
+  }, [quoteSummary, quotePiece, quoteSizeCm, quoteLoading, floor, roomSizeCm, floorMetrics.activeRatio, inventoryStatus, captureTopDownSnapshot, activeWallPiece, sceneName, selectedSceneId, trackEvent, saveScene, confirm, toast])
 
   useEffect(() => {
     if (selected && isMovable(selected) && selectedPiece) {
@@ -1306,7 +1439,7 @@ function Demo() {
     const duration = 0.8
     let t = 0
     function step() {
-      t += 1/60
+      t += 1 / 60
       const alpha = Math.min(t / duration, 1)
       cam.position.lerpVectors(startPos, endPos, alpha)
       controls.target.lerpVectors(startTarget, endTarget, alpha)
@@ -1339,7 +1472,7 @@ function Demo() {
     const controls = controlsRef.current
     const cam = controls?.object
     if (!controls || !cam) return
-    controls.target.set(0,0,0)
+    controls.target.set(0, 0, 0)
     cam.position.set(...cameraConfig.position)
     controls.update()
     handlePointerMissed()
@@ -1411,7 +1544,19 @@ function Demo() {
         roomSizeCm={roomSizeCm}
         onRoomSizeChange={updateRoomSize}
         roomShape={roomShape}
-        onRoomShapeChange={setRoomShape}
+        onRoomShapeChange={handleRoomShapeChange}
+        customGrid={customGrid}
+        onCustomGridChange={handleCustomGridChange}
+        wallViewMode={wallViewMode}
+        onWallViewModeChange={setWallViewMode}
+        hiddenWallIds={hiddenWallIds}
+        onResetHiddenWalls={() => setHiddenWallIds([])}
+        interiorWalls={interiorWalls}
+        onAddInteriorWall={addInteriorWall}
+        onUpdateInteriorWall={updateInteriorWall}
+        onRemoveInteriorWall={removeInteriorWall}
+        exactFloorAreaM2={floorMetrics.floorAreaM2}
+        exactWallAreaM2={wallGeometry.totalWallAreaM2}
         windows={windows}
         onAddWindow={addWindow}
         onUpdateWindow={updateWindow}
@@ -1420,8 +1565,6 @@ function Demo() {
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
         inventoryStatus={inventoryStatus}
-        coverSolid={coverSolid}
-        onToggleCoverSolid={() => setCoverSolid(v => !v)}
       />
       {/* Panel de Iluminación - esquina inferior izquierda */}
       <LightingPanel
@@ -1435,7 +1578,7 @@ function Demo() {
         onDofToggle={() => setDofOn(v => !v)}
       />
 
-      <RightSidebar 
+      <RightSidebar
         activeSurface={activeSurface}
         previewFloor={previewFloorMaterial}
         previewWall={previewWallMaterial}
@@ -1443,23 +1586,25 @@ function Demo() {
         installedWall={wallPiece?.material}
         floorCoverage={coverageData}
         wallCoverage={wallCoverageData}
-        coverSolid={coverSolid}
-        onToggleCoverSolid={() => setCoverSolid(v => !v)}
+        floorCoverSolid={floorCoverSolid}
+        onToggleFloorCoverSolid={() => setFloorCoverSolid(v => !v)}
+        wallCoverSolid={wallCoverSolid}
+        onToggleWallCoverSolid={() => setWallCoverSolid(v => !v)}
         timeOfDay={timeOfDay}
         lightIntensity={lightIntensity}
         onApplyFloor={() => {
-          if (pieces.length > 0) {
-            if (!window.confirm('¿Deseas reemplazar el material instalado en el piso?')) return
+          const applied = addOnePiece(previewFloorMaterial)
+          if (applied) {
+            setPreviewFloorMaterial(null)
+            toast('Material aplicado al piso.', { type: 'success' })
           }
-          addOnePiece()
-          setPreviewFloorMaterial(null)
         }}
         onApplyWall={() => {
-          if (wallPieces.length > 0) {
-            if (!window.confirm('¿Deseas reemplazar el material instalado en las paredes?')) return
+          const applied = addOneWallPiece(previewWallMaterial)
+          if (applied) {
+            setPreviewWallMaterial(null)
+            toast('Material aplicado a las paredes.', { type: 'success' })
           }
-          addOneWallPiece()
-          setPreviewWallMaterial(null)
         }}
         onCancelPreviewFloor={() => {
           setPreviewFloorMaterial(null)
@@ -1482,14 +1627,29 @@ function Demo() {
       />
 
       {selected && (
-        <div style={{position:'fixed', top:62, right:12, zIndex:11, background:'rgba(0,0,0,.75)', color:'#fff', padding:'10px 12px', borderRadius:8, fontFamily:'system-ui,Arial,sans-serif', width:240}}>
-          <div style={{fontWeight:'600', marginBottom:8}}>Objeto seleccionado</div>
-          <div style={{fontSize:12, opacity:0.8, marginBottom:10, lineHeight:1.25}}>
-            Selecciona piso/pared para cambiar materiales.
+        <div style={{ position: 'fixed', top: 74, left: 390, zIndex: 80, background: 'rgba(15, 23, 42, 0.88)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '10px 14px', borderRadius: 12, fontFamily: 'system-ui,Arial,sans-serif', width: 240, boxShadow: '0 10px 25px rgba(0,0,0,0.4)' }}>
+          <div style={{ fontWeight: '700', fontSize: 13, marginBottom: 4, color: '#34d399' }}>
+            {selected?.userData?.wallLabel || selected?.name || 'Superficie seleccionada'}
           </div>
-          <div style={{display:'flex', gap:6}}>
-            <button onClick={handlePointerMissed} style={{flex:1, padding:'6px 10px', background:'#444', color:'#fff', border:'none', borderRadius:4}}>Quitar</button>
-            <button onClick={resetCamera} style={{flex:1, padding:'6px 10px', background:'#1976d2', color:'#fff', border:'none', borderRadius:4}}>Reset</button>
+          <div style={{ fontSize: 11, color: '#cbd5e1', marginBottom: 10, lineHeight: 1.3 }}>
+            Superficie activa: <strong>{activeSurface === 'walls' ? 'Paredes' : 'Piso'}</strong>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {selected?.userData?.wallSegmentId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const wid = selected.userData.wallSegmentId
+                  setHiddenWallIds((prev) => (prev.includes(wid) ? prev : [...prev, wid]))
+                  handlePointerMissed()
+                }}
+                style={{ width: '100%', padding: '6px 10px', background: '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 6, cursor: 'pointer' }}
+              >
+                👁️ Ocultar esta pared
+              </button>
+            )}
+            <button onClick={handlePointerMissed} style={{ flex: 1, padding: '6px 10px', background: '#334155', color: '#fff', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, cursor: 'pointer' }}>Deseleccionar</button>
+            <button onClick={resetCamera} style={{ flex: 1, padding: '6px 10px', background: '#0284c7', color: '#fff', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, cursor: 'pointer' }}>Centrar cámara</button>
           </div>
         </div>
       )}
@@ -1531,43 +1691,46 @@ function Demo() {
         {/* Postprocesado */}
         <PostFX enabled={postFXOn && postprocessingConfig.enabled} dofOn={dofOn} selected={selected} />
 
-        {/* Escenario y Piso */}
-        <Floor kind={floor} width={roomSize.width} depth={roomSize.depth} roomShape={roomShape} onPointerDown={handleSelect} name="Piso" />
+        {/* Escenario y Piso (Adaptable a la cuadrícula Sandbox) */}
+        <Floor
+          kind={floor}
+          width={roomSize.width}
+          depth={roomSize.depth}
+          roomShape={roomShape}
+          customGrid={customGrid}
+          onPointerDown={handleSelect}
+          name="Piso"
+        />
 
-        {/* Preview de cobertura (instanced, permanente) */}
+        {/* Cobertura de Piso (Modo Grilla o Sólido, adaptable a la cuadrícula Sandbox) */}
         <CoverPreview
           enabled={!!activeFloorPiece && coverageData?.computed}
           piece={activeFloorPiece}
           pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
           roomSize={roomSize}
+          roomShape={roomShape}
+          customGrid={customGrid}
           textureUrl={activeFloorPiece?.textureUrl}
-          solid={coverSolid}
+          solid={floorCoverSolid}
+          onPointerDown={handleSelect}
         />
 
-
-        {/* Preview: pieza centrada en la pared activa (permanente si no hay material aplicado o si hay preview) */}
-        {(!wallPieces.length || previewWallMaterial) && (
-          <WallPiecePreview
-            piece={activeWallPiece}
-            roomSize={roomSize}
-            wallThickness={wallThickness}
-            activeWallKey={activeWallKey}
-            onPointerDown={handleSelect}
-          />
-        )}
-
-        {/* Preview de cobertura en paredes (instanced, permanente) */}
+        {/* Cobertura en Paredes (Modo Grilla o Sólido, adaptable a todos los muros del cuarto Sandbox) */}
         <WallCoverPreview
           enabled={!!activeWallPiece && wallCoverageData?.computed}
           piece={activeWallPiece}
           roomSize={roomSize}
           wallThickness={wallThickness}
+          wallSegments={wallGeometry.segments}
+          wallHeightFactor={wallHeightFactor}
+          hiddenWallIds={hiddenWallIds}
           textureUrl={activeWallPiece?.textureUrl}
-          solid={coverSolid}
+          solid={wallCoverSolid}
+          onPointerDown={handleSelect}
         />
 
         {/* Renderizado de Ventanas 3D Múltiples */}
-        {windows.map((win, idx) => {
+        {wallHeightFactor > 0.2 && windows.map((win, idx) => {
           const wM = (win.widthCm || 160) / 100
           const hM = (win.heightCm || 120) / 100
           const sillM = (win.sillHeightCm || 90) / 100
@@ -1575,41 +1738,19 @@ function Demo() {
           const eps = 0.003
           const wallKey = win.wallKey || 'north'
 
+          // Buscar el segmento principal correspondiente a la orientación de la ventana
+          const targetSeg = wallGeometry.segments.find((s) => s.wallKey === wallKey && !hiddenWallIds.includes(s.id))
           let pos = [0, y, -roomSize.depth / 2 + wallThickness / 2 + eps]
           let rot = [0, 0, 0]
 
-          switch (wallKey) {
-            case 'south':
-              if (roomShape === 'u_shape') {
-                pos = [0, y, 0 - wallThickness / 2 - eps] // Inner North acts as South facing
-              } else if (roomShape === 'l_shape') {
-                pos = [-roomSize.width / 4, y, roomSize.depth / 2 - wallThickness / 2 - eps]
-              } else {
-                pos = [0, y, roomSize.depth / 2 - wallThickness / 2 - eps]
-              }
-              rot = [0, Math.PI, 0]
-              break
-            case 'west':
-              if (roomShape === 't_shape') {
-                pos = [-roomSize.width / 2 + wallThickness / 2 + eps, y, -roomSize.depth / 4]
-              } else {
-                pos = [-roomSize.width / 2 + wallThickness / 2 + eps, y, 0]
-              }
-              rot = [0, Math.PI / 2, 0]
-              break
-            case 'east':
-              if (roomShape === 'l_shape' || roomShape === 't_shape') {
-                pos = [roomSize.width / 2 - wallThickness / 2 - eps, y, -roomSize.depth / 4]
-              } else {
-                pos = [roomSize.width / 2 - wallThickness / 2 - eps, y, 0]
-              }
-              rot = [0, -Math.PI / 2, 0]
-              break
-            case 'north':
-            default:
-              pos = [0, y, -roomSize.depth / 2 + wallThickness / 2 + eps]
-              rot = [0, 0, 0]
-              break
+          if (targetSeg) {
+            if (targetSeg.axis === 'x') {
+              pos = [targetSeg.cx, y, targetSeg.cz + targetSeg.normalZ * (wallThickness / 2 + eps)]
+              rot = [0, targetSeg.normalZ > 0 ? 0 : Math.PI, 0]
+            } else {
+              pos = [targetSeg.cx + targetSeg.normalX * (wallThickness / 2 + eps), y, targetSeg.cz]
+              rot = [0, targetSeg.normalX > 0 ? Math.PI / 2 : -Math.PI / 2, 0]
+            }
           }
 
           return (
@@ -1625,140 +1766,42 @@ function Demo() {
           )
         })}
 
-        {/* Piezas dinámicas (inicia vacío) */}
-        {pieces.map((p) => (
-          <TexturedPieceMesh key={p.id} piece={p} onPointerDown={handleSelect} />
-        ))}
+        {/* Paredes dinámicas generadas automáticamente por el Constructor Sandbox */}
+        {wallHeightFactor > 0.01 &&
+          wallGeometry.segments
+            .filter((seg) => !hiddenWallIds.includes(seg.id))
+            .map((seg) => {
+              const segH = seg.height * wallHeightFactor
+              const boxArgs =
+                seg.axis === 'x'
+                  ? [seg.length, segH, wallThickness]
+                  : [wallThickness, segH, seg.length]
+              const meshName = `Pared-${seg.wallKey === 'north' ? 'Norte' : seg.wallKey === 'south' ? 'Sur' : seg.wallKey === 'west' ? 'Oeste' : 'Este'}-${seg.id}`
 
-        {/* Paredes adaptables al tamaño y forma configurada del cuarto */}
-        
-        {/* Pared Norte (Común a todas las formas) */}
-        <mesh position={[0, roomSize.height / 2, -roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Norte">
-          <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
-          <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-        </mesh>
+              return (
+                <mesh
+                  key={seg.id}
+                  position={[seg.cx, segH / 2, seg.cz]}
+                  castShadow
+                  receiveShadow
+                  onPointerDown={handleSelect}
+                  name={meshName}
+                  userData={{ wallSegmentId: seg.id, wallLabel: seg.label }}
+                >
+                  <boxGeometry args={boxArgs} />
+                  <meshStandardMaterial
+                    color={seg.isInterior ? '#dbeafe' : '#e5e7eb'}
+                    roughness={0.9}
+                    metalness={0.0}
+                    emissive="#000000"
+                  />
+                </mesh>
+              )
+            })}
 
-        {roomShape === 'rectangular' && (
-          <>
-            <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
-              <boxGeometry args={[roomSize.width, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-          </>
-        )}
-
-        {roomShape === 'open_loft' && (
-          <>
-            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-          </>
-        )}
-
-        {roomShape === 'l_shape' && (
-          <>
-            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
-              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Arriba">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 4, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Interior">
-              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[0, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-          </>
-        )}
-
-        {roomShape === 'u_shape' && (
-          <>
-            <mesh position={[-roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 2, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Este">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width * 3/8, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
-              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width * 3/8, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Derecha">
-              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste-Interior">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[0, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Interior">
-              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-          </>
-        )}
-
-        {roomShape === 't_shape' && (
-          <>
-            <mesh position={[-roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 2, roomSize.height / 2, -roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width * 3/8, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Izquierda">
-              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width * 3/8, roomSize.height / 2, 0]} castShadow onPointerDown={handleSelect} name="Pared-Sur-Derecha">
-              <boxGeometry args={[roomSize.width / 4, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[-roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Oeste-Interior">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[roomSize.width / 4, roomSize.height / 2, roomSize.depth / 4]} castShadow onPointerDown={handleSelect} name="Pared-Este-Interior">
-              <boxGeometry args={[wallThickness, roomSize.height, roomSize.depth / 2]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-            <mesh position={[0, roomSize.height / 2, roomSize.depth / 2]} castShadow onPointerDown={handleSelect} name="Pared-Sur">
-              <boxGeometry args={[roomSize.width / 2, roomSize.height, wallThickness]} />
-              <meshStandardMaterial color={'#e5e7eb'} roughness={0.9} metalness={0.0} emissive="#000000" />
-            </mesh>
-          </>
-        )}
-  <OrbitControls ref={controlsRef} makeDefault
+        <OrbitControls
+          ref={controlsRef}
+          makeDefault
           enableDamping={controlsConfig.enableDamping}
           dampingFactor={controlsConfig.dampingFactor}
           rotateSpeed={controlsConfig.rotateSpeed}

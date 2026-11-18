@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
+import { GRID_SIZE, normalizeGrid } from '../roomGeometry'
 
 const FALLBACK_IMAGE_SVG =
   'data:image/svg+xml;utf8,' +
@@ -50,6 +51,18 @@ export function Controls({
   onRoomSizeChange,
   roomShape = 'rectangular',
   onRoomShapeChange,
+  customGrid = null,
+  onCustomGridChange,
+  wallViewMode = 'full',
+  onWallViewModeChange,
+  hiddenWallIds = [],
+  onResetHiddenWalls,
+  interiorWalls = [],
+  onAddInteriorWall,
+  onUpdateInteriorWall,
+  onRemoveInteriorWall,
+  exactFloorAreaM2 = null,
+  exactWallAreaM2 = null,
   windows = [],
   onAddWindow,
   onUpdateWindow,
@@ -58,11 +71,54 @@ export function Controls({
   onGenerateQuote,
   quoteLoading,
   inventoryStatus,
-  coverSolid = false,
-  onToggleCoverSolid,
 }) {
-  const [activeTab, setActiveTab] = useState('materials') // 'materials' | 'space' | 'coverage' | 'quote'
+  const [activeTab, setActiveTab] = useState('materials') // 'materials' | 'space' | 'quote'
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const paintModeRef = useRef(null) // null | 1 (paint) | 0 (erase)
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      paintModeRef.current = null
+    }
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [])
+
+  const cleanGrid = useMemo(() => normalizeGrid(customGrid, roomShape), [customGrid, roomShape])
+  const activeBlocksCount = useMemo(() => {
+    let count = 0
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (cleanGrid[r][c] === 1) count++
+      }
+    }
+    return count
+  }, [cleanGrid])
+
+  const applyCellChange = (r, c, targetVal) => {
+    if (!onCustomGridChange) return
+    if (cleanGrid[r][c] === targetVal) return
+    // No permitir borrar el último bloque activo del cuarto
+    if (targetVal === 0 && activeBlocksCount <= 1) return
+
+    const next = cleanGrid.map((row, ri) =>
+      row.map((val, ci) => (ri === r && ci === c ? targetVal : val))
+    )
+    onCustomGridChange(next)
+  }
+
+  const handleCellMouseDown = (r, c, e) => {
+    e.preventDefault()
+    const current = cleanGrid[r][c]
+    const nextVal = current === 1 ? 0 : 1
+    paintModeRef.current = nextVal
+    applyCellChange(r, c, nextVal)
+  }
+
+  const handleCellMouseEnter = (r, c) => {
+    if (paintModeRef.current === null) return
+    applyCellChange(r, c, paintModeRef.current)
+  }
 
   const activeMaterialId = activeSurface === 'walls' ? selectedWallMaterialId : selectedMaterialId
   const selectedMaterial = useMemo(
@@ -88,7 +144,7 @@ export function Controls({
         <div style={styles.topBarLeft}>
           <img src="/images/avodah_logo.png" alt="AVODAH 3D" style={{ height: '24px', objectFit: 'contain' }} />
           <div style={styles.divider} />
-          
+
           {/* Surface Selector Pills */}
           <div style={styles.surfacePills}>
             <button
@@ -140,7 +196,7 @@ export function Controls({
           <button onClick={onCreateNewScene} style={styles.btnSecondary} title="Crear escenario nuevo">
             ✨ Nuevo
           </button>
-          
+
           <button onClick={onSaveScene} style={styles.btnPrimary} title="Guardar escenario actual">
             💾 Guardar
           </button>
@@ -319,31 +375,40 @@ export function Controls({
             </div>
           )}
 
-          {/* ──────── TAB 2: ESPACIO & CUARTO ──────── */}
+          {/* ──────── TAB 2: ESPACIO & CUARTO (MODO SANDBOX) ──────── */}
           {activeTab === 'space' && (
             <div style={styles.sectionFade}>
-              {/* Formas del Cuarto */}
+              {/* Constructor Sandbox por Cuadrícula 2D */}
               <div style={styles.sectionTitleRow}>
-                <span style={styles.sectionTitle}>Forma del Cuarto / Escena</span>
+                <span style={styles.sectionTitle}>🧩 Diseñador Libre de Cuarto (Sandbox)</span>
+                <span style={styles.badgeInfo}>{activeBlocksCount}/100 bloques</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 16 }}>
+
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8, lineHeight: 1.35 }}>
+                Haz clic o arrastra sobre la cuadrícula para <strong>pintar o recortar secciones</strong> de tu cuarto. El piso y las paredes 3D se adaptan al instante.
+              </div>
+
+              {/* Plantillas Rápidas de Punto de Partida */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5, marginBottom: 10 }}>
                 {[
-                  { id: 'rectangular', label: '⬛ Rectangular' },
-                  { id: 'l_shape', label: '🔲 Forma en L' },
-                  { id: 't_shape', label: '✝️ Forma en T' },
+                  { id: 'rectangular', label: '⬛ Completo' },
+                  { id: 'l_shape', label: '🔲 Escuadra L' },
                   { id: 'u_shape', label: '⊔ Forma en U' },
-                  { id: 'open_loft', label: '🛋️ Loft Abierto' },
+                  { id: 't_shape', label: '✝️ Forma en T' },
+                  { id: 'corridor', label: '🚪 Pasillo' },
+                  { id: 'open_loft', label: '🛋️ Frente Abierto' },
                 ].map((shape) => (
                   <button
                     key={shape.id}
+                    type="button"
                     onClick={() => onRoomShapeChange?.(shape.id)}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: 8,
+                      padding: '6px 4px',
+                      borderRadius: 7,
                       border: roomShape === shape.id ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
                       background: roomShape === shape.id ? '#0f172a' : '#1e293b',
-                      color: roomShape === shape.id ? '#10b981' : '#94a3b8',
-                      fontSize: 11,
+                      color: roomShape === shape.id ? '#10b981' : '#cbd5e1',
+                      fontSize: 10,
                       fontWeight: 600,
                       cursor: 'pointer',
                       textAlign: 'center',
@@ -353,6 +418,238 @@ export function Controls({
                   </button>
                 ))}
               </div>
+
+              {/* Cuadrícula Interactiva 10x10 */}
+              <div
+                onMouseLeave={() => { paintModeRef.current = null }}
+                style={{
+                  background: '#0f172a',
+                  padding: 10,
+                  borderRadius: 12,
+                  border: '1px solid rgba(16, 185, 129, 0.28)',
+                  marginBottom: 14,
+                  userSelect: 'none',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 6 }}>
+                  <span>⬆️ Norte (Fondo)</span>
+                  <span>
+                    Bloque: {((roomSizeCm.width / 100) / GRID_SIZE).toFixed(1)}m × {((roomSizeCm.depth / 100) / GRID_SIZE).toFixed(1)}m
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+                    gap: 3,
+                    aspectRatio: '1 / 1',
+                    maxWidth: 240,
+                    margin: '0 auto',
+                  }}
+                >
+                  {cleanGrid.map((row, rIdx) =>
+                    row.map((cellVal, cIdx) => {
+                      const isActive = cellVal === 1
+                      return (
+                        <div
+                          key={`${rIdx}-${cIdx}`}
+                          onMouseDown={(e) => handleCellMouseDown(rIdx, cIdx, e)}
+                          onMouseEnter={() => handleCellMouseEnter(rIdx, cIdx)}
+                          title={`Fila ${rIdx + 1}, Columna ${cIdx + 1} (${isActive ? 'Activo - clic para quitar' : 'Vacío - clic para agregar'})`}
+                          style={{
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            background: isActive
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : 'rgba(30, 41, 59, 0.7)',
+                            border: isActive
+                              ? '1px solid rgba(52, 211, 153, 0.6)'
+                              : '1px dashed rgba(148, 163, 184, 0.2)',
+                            boxShadow: isActive ? 'inset 0 1px 2px rgba(255,255,255,0.25)' : 'none',
+                            transition: 'transform 0.08s ease, background 0.1s ease',
+                          }}
+                        />
+                      )
+                    })
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#64748b', marginTop: 6 }}>
+                  <span>⬇️ Sur (Frente)</span>
+                  <span style={{ color: '#34d399', fontWeight: 600 }}>
+                    {roomShape === 'custom' ? '✏️ Forma personalizada' : 'Plantilla activa'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Control de Visibilidad de Paredes (Estilo Sims) */}
+              <div style={{ ...styles.sectionTitleRow, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                <span style={styles.sectionTitle}>🧱 Vista de Paredes</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                {[
+                  { id: 'full', label: '🧱 Completas' },
+                  { id: 'half', label: '📐 Media Pared' },
+                  { id: 'hidden', label: '👁️ Ocultas' },
+                ].map((wm) => (
+                  <button
+                    key={wm.id}
+                    type="button"
+                    onClick={() => onWallViewModeChange?.(wm.id)}
+                    style={{
+                      padding: '7px 4px',
+                      borderRadius: 8,
+                      border: wallViewMode === wm.id ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                      background: wallViewMode === wm.id ? '#10b981' : '#1e293b',
+                      color: wallViewMode === wm.id ? '#fff' : '#94a3b8',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {wm.label}
+                  </button>
+                ))}
+              </div>
+
+              {hiddenWallIds?.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onResetHiddenWalls}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    marginBottom: 12,
+                    borderRadius: 8,
+                    border: '1px solid rgba(59, 130, 246, 0.4)',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#93c5fd',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🔄 Mostrar paredes ocultas manualmente ({hiddenWallIds.length})
+                </button>
+              )}
+
+              {/* Muros Divisorios Internos */}
+              <div style={{ ...styles.sectionTitleRow, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                <span style={styles.sectionTitle}>🏗️ Muros Internos ({interiorWalls?.length || 0})</span>
+                <button
+                  type="button"
+                  onClick={onAddInteriorWall}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: '#3b82f6',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ➕ Añadir Muro
+                </button>
+              </div>
+
+              {interiorWalls?.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                  {interiorWalls.map((iw, idx) => (
+                    <div key={iw.id || idx} style={{ background: '#1e293b', padding: 10, borderRadius: 10, border: '1px solid rgba(59,130,246,0.3)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#93c5fd' }}>
+                          🧱 Muro Interno #{idx + 1}
+                        </span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            onClick={() => onUpdateInteriorWall?.(iw.id, { axis: iw.axis === 'z' ? 'x' : 'z' })}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              border: 'none',
+                              background: 'rgba(59,130,246,0.2)',
+                              color: '#93c5fd',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            🔄 {iw.axis === 'z' ? 'Vertical' : 'Horizontal'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveInteriorWall?.(iw.id)}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              border: 'none',
+                              background: 'rgba(239,68,68,0.2)',
+                              color: '#f87171',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Posición X (Columna)</span>
+                          <span style={styles.sliderValue}>{iw.col ?? 5} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={9}
+                          step={1}
+                          value={iw.col ?? 5}
+                          onChange={(e) => onUpdateInteriorWall?.(iw.id, { col: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
+
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Posición Z (Fila)</span>
+                          <span style={styles.sliderValue}>{iw.row ?? 5} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={9}
+                          step={1}
+                          value={iw.row ?? 5}
+                          onChange={(e) => onUpdateInteriorWall?.(iw.id, { row: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
+
+                      <div style={styles.sliderGroup}>
+                        <div style={styles.sliderHeader}>
+                          <span>Longitud (Bloques)</span>
+                          <span style={styles.sliderValue}>{iw.lengthCells ?? 3} bloques</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={10}
+                          step={1}
+                          value={iw.lengthCells ?? 3}
+                          onChange={(e) => onUpdateInteriorWall?.(iw.id, { lengthCells: Number(e.target.value) })}
+                          style={styles.rangeInput}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Personalización de Ventanas 3D Múltiples en Paredes */}
               <div style={{ ...styles.sectionTitleRow, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
@@ -455,13 +752,13 @@ export function Controls({
                 </div>
               )}
 
-              <div style={styles.sectionTitleRow}>
-                <span style={styles.sectionTitle}>Dimensiones Principales</span>
+              <div style={{ ...styles.sectionTitleRow, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                <span style={styles.sectionTitle}>Escala General del Terreno</span>
               </div>
 
               <div style={styles.sliderGroup}>
                 <div style={styles.sliderHeader}>
-                  <span>Ancho (X)</span>
+                  <span>Ancho Total (X)</span>
                   <span style={styles.sliderValue}>{roomSizeCm.width} cm</span>
                 </div>
                 <input
@@ -477,7 +774,7 @@ export function Controls({
 
               <div style={styles.sliderGroup}>
                 <div style={styles.sliderHeader}>
-                  <span>Largo (Z)</span>
+                  <span>Largo Total (Z)</span>
                   <span style={styles.sliderValue}>{roomSizeCm.depth} cm</span>
                 </div>
                 <input
@@ -493,7 +790,7 @@ export function Controls({
 
               <div style={styles.sliderGroup}>
                 <div style={styles.sliderHeader}>
-                  <span>Alto (Y)</span>
+                  <span>Altura de Paredes (Y)</span>
                   <span style={styles.sliderValue}>{roomSizeCm.height} cm</span>
                 </div>
                 <input
@@ -510,17 +807,22 @@ export function Controls({
               {/* Area summary badge */}
               <div style={styles.areaMetricCard}>
                 <div style={styles.metricItem}>
-                  <div style={styles.metricLabel}>Área del Piso</div>
+                  <div style={styles.metricLabel}>Área Real Piso</div>
                   <div style={styles.metricVal}>
-                    {((roomSizeCm.width / 100) * (roomSizeCm.depth / 100)).toFixed(2)} m²
+                    {(exactFloorAreaM2 != null
+                      ? exactFloorAreaM2
+                      : (roomSizeCm.width / 100) * (roomSizeCm.depth / 100)
+                    ).toFixed(2)}{' '}
+                    m²
                   </div>
                 </div>
                 <div style={styles.metricDivider} />
                 <div style={styles.metricItem}>
-                  <div style={styles.metricLabel}>Área Paredes</div>
+                  <div style={styles.metricLabel}>Área Real Paredes</div>
                   <div style={styles.metricVal}>
-                    {(
-                      2 * (roomSizeCm.width / 100) * (roomSizeCm.height / 100) +
+                    {(exactWallAreaM2 != null
+                      ? exactWallAreaM2
+                      : 2 * (roomSizeCm.width / 100) * (roomSizeCm.height / 100) +
                       2 * (roomSizeCm.depth / 100) * (roomSizeCm.height / 100)
                     ).toFixed(2)}{' '}
                     m²
@@ -619,18 +921,38 @@ export function Controls({
               {quoteSummary?.ready ? (
                 <div style={styles.quoteCard}>
                   <div style={styles.quoteCardTitle}>📋 Resumen de Cotización</div>
-                  <div style={styles.infoRow}>
-                    <span>Producto:</span>
-                    <strong>{quoteSummary.itemLabel}</strong>
-                  </div>
-                  <div style={styles.infoRow}>
-                    <span>Superficie piso:</span>
-                    <strong>{quoteSummary.floorAreaLabel}</strong>
-                  </div>
-                  <div style={styles.infoRow}>
-                    <span>Precio ref. m²:</span>
-                    <strong>{quoteSummary.unitPriceLabel}</strong>
-                  </div>
+                  {quoteSummary.hasFloor && (
+                    <>
+                      <div style={styles.infoRow}>
+                        <span>Piso:</span>
+                        <strong>{quoteSummary.itemLabel}</strong>
+                      </div>
+                      <div style={styles.infoRow}>
+                        <span>Área de piso:</span>
+                        <strong>{quoteSummary.floorAreaLabel}</strong>
+                      </div>
+                      <div style={styles.infoRow}>
+                        <span>Subtotal piso:</span>
+                        <strong>{quoteSummary.floorSubtotalLabel}</strong>
+                      </div>
+                    </>
+                  )}
+                  {quoteSummary.hasWall && (
+                    <>
+                      <div style={{ ...styles.infoRow, marginTop: quoteSummary.hasFloor ? 8 : 0, paddingTop: quoteSummary.hasFloor ? 8 : 0, borderTop: quoteSummary.hasFloor ? '1px dashed rgba(255,255,255,0.1)' : 'none' }}>
+                        <span>Paredes:</span>
+                        <strong>{quoteSummary.wallItemLabel}</strong>
+                      </div>
+                      <div style={styles.infoRow}>
+                        <span>Área de paredes:</span>
+                        <strong>{quoteSummary.wallAreaLabel}</strong>
+                      </div>
+                      <div style={styles.infoRow}>
+                        <span>Subtotal paredes:</span>
+                        <strong>{quoteSummary.wallSubtotalLabel}</strong>
+                      </div>
+                    </>
+                  )}
                   <div style={styles.quoteTotalRow}>
                     <span>Total Estimado:</span>
                     <span style={styles.quoteTotalVal}>{quoteSummary.totalLabel}</span>
@@ -638,7 +960,7 @@ export function Controls({
                 </div>
               ) : (
                 <div style={styles.aiHintBox}>
-                  💡 Agrega una pieza en el piso para calcular el resumen de cotización.
+                  💡 Selecciona o aplica un material en el piso o paredes para calcular el resumen de cotización.
                 </div>
               )}
 
