@@ -130,6 +130,7 @@ Route::group(['middleware' => ['web', 'auth']], function () use ($disableViteHot
 
                if (!empty($sceneIds)) {
                     $quotesByScene = ThreeQuote::query()
+                         ->with(['venta.factura'])
                          ->whereIn('three_scene_id', $sceneIds)
                          ->orderByDesc('created_at')
                          ->get()

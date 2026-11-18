@@ -144,6 +144,12 @@ document.head.appendChild(style);
       document.body.classList.remove('modern-list-cards');
     }
 
+    if (href.includes('/admin/crud/list/three-quote-resources')) {
+      ensureQuotesViewTabs();
+    } else {
+      removeQuotesViewTabs();
+    }
+
     // Rich Rows (Inventario)
     if(href.includes('/admin/crud/list/inventario-resources')) {
       document.body.classList.add('rich-rows-table');
@@ -499,5 +505,46 @@ function removeProductsViewToggle(){
   const btn = document.getElementById('viewToggleProducts');
   if(btn && btn.parentNode){
     btn.parentNode.removeChild(btn);
+  }
+}
+
+function ensureQuotesViewTabs(){
+  const params = new URLSearchParams(location.search);
+  const currentVista = params.get('vista') === 'sold' ? 'sold' : 'sent';
+
+  let bar = document.getElementById('quotesViewTabsBar');
+  const tableBlock = document.querySelector('[data-controller="table"]') || document.querySelector('form#post-form');
+  if (!tableBlock || !tableBlock.parentNode) return;
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'quotesViewTabsBar';
+    bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding:12px 16px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 4px 12px rgba(15,23,42,0.04);';
+    tableBlock.parentNode.insertBefore(bar, tableBlock);
+  }
+
+  const baseUrl = location.pathname;
+  const activeStyle = 'display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border-radius:9px;background:#0f172a;color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;box-shadow:0 4px 10px rgba(15,23,42,0.2);transition:all 0.2s;';
+  const inactiveStyle = 'display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border-radius:9px;background:#f8fafc;color:#475569;font-weight:600;font-size:13px;text-decoration:none;border:1px solid #cbd5e1;transition:all 0.2s;';
+
+  bar.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <a href="${baseUrl}?vista=sent" style="${currentVista === 'sent' ? activeStyle : inactiveStyle}">
+        <span>⏳ Cotizaciones Pendientes</span>
+      </a>
+      <a href="${baseUrl}?vista=sold" style="${currentVista === 'sold' ? activeStyle : inactiveStyle}">
+        <span>✅ Cotizaciones Hechas</span>
+      </a>
+    </div>
+    <div style="font-size:12px;color:#64748b;font-weight:500;">
+      Mostrando las más recientes primero
+    </div>
+  `;
+}
+
+function removeQuotesViewTabs(){
+  const bar = document.getElementById('quotesViewTabsBar');
+  if (bar && bar.parentNode) {
+    bar.parentNode.removeChild(bar);
   }
 }

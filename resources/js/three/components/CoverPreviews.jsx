@@ -1,14 +1,8 @@
 import React, { useRef, useMemo, useEffect } from 'react'
-import { useTexture } from '@react-three/drei'
 import { SRGBColorSpace, Object3D } from 'three'
 import { SurfaceMaterial } from './SurfaceMaterial'
 import { isPointInActiveCell, normalizeGrid } from '../roomGeometry'
-
-const WHITE_TEX_DATA_URL =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ffffff"/></svg>'
-  )
+import { useSafeTexture } from '../hooks/useSafeTexture'
 
 /**
  * CoverPreview - Cobertura del Piso (respeta la forma personalizada de la cuadrícula).
@@ -27,7 +21,7 @@ export function CoverPreview({
 }) {
   const MAX_PREVIEW = 1600
   const instancesRef = useRef()
-  const map = useTexture(textureUrl || piece?.textureUrl || WHITE_TEX_DATA_URL)
+  const map = useSafeTexture(textureUrl || piece?.textureUrl)
 
   useEffect(() => {
     if (!map) return
@@ -200,7 +194,7 @@ export function WallCoverPreview({
 }) {
   const MAX_PREVIEW = 2000
   const instancesRef = useRef()
-  const map = useTexture((textureUrl || piece?.textureUrl) ?? WHITE_TEX_DATA_URL)
+  const map = useSafeTexture(textureUrl || piece?.textureUrl)
 
   useEffect(() => {
     if (!map) return

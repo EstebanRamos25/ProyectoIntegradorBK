@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import React, { Suspense, useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Environment, SoftShadows, PerformanceMonitor, useTexture } from '@react-three/drei'
+import { OrbitControls, Environment, SoftShadows, PerformanceMonitor } from '@react-three/drei'
 // Effects re-exported from components/PostFX.jsx
 import {
   ACESFilmicToneMapping,
@@ -154,6 +154,7 @@ function Demo() {
   const [scenesError, setScenesError] = useState(null)
   const [selectedSceneId, setSelectedSceneId] = useState(null)
   const [sceneName, setSceneName] = useState('')
+  const [isReadOnly, setIsReadOnly] = useState(false)
 
   const nextId = useRef(1)
   const lastEmissive = useRef({ obj: null, color: null })
@@ -187,7 +188,7 @@ function Demo() {
   }, [selectedSceneId])
 
   const { recommendations, recommendationsLoading, recommendationsError } = useRecommendations(selectedSceneId, selectedMaterialId, selectedWallMaterialId, trackEvent)
-  const pendingSceneDataRef = useRef(null)
+  const [pendingSceneData, setPendingSceneData] = useState(null)
   const autoLoadedSceneRef = useRef(false)
 
   const currencyFormatter = useMemo(
@@ -413,6 +414,11 @@ function Demo() {
   }, [activeWallPiece, wallGeometry.totalWallAreaM2])
 
   const buildScenePayload = useCallback(() => {
+    const effectiveWall = activeWallPiece
+    const effectiveFloorPieces = pieces.length > 0
+      ? pieces
+      : (activeFloorPiece ? [activeFloorPiece] : [])
+
     return {
       version: 2,
       floor,
@@ -423,23 +429,27 @@ function Demo() {
       floorCoverSolid,
       wallCoverSolid,
       windows,
-      roomSizeCm,
-      selectedMaterialId,
-      selectedWallMaterialId,
+      roomSizeCm: {
+        width: Number(roomSizeCm.width) || 1000,
+        depth: Number(roomSizeCm.depth) || 1000,
+        height: Number(roomSizeCm.height) || 300,
+      },
+      selectedMaterialId: effectiveFloorPieces[0]?.material?.id ?? selectedMaterialId,
+      selectedWallMaterialId: effectiveWall?.material?.id ?? selectedWallMaterialId,
 
-      wall: wallPiece ? {
-        material_id: wallPiece?.material?.id ?? null,
-        width_cm: wallPiece.width_cm,
-        depth_cm: wallPiece.depth_cm,
+      wall: effectiveWall ? {
+        material_id: effectiveWall?.material?.id ?? null,
+        width_cm: effectiveWall.width_cm,
+        depth_cm: effectiveWall.depth_cm,
         activeWallKey,
       } : null,
-      pieces: pieces.map((p) => ({
-        kind: p.kind,
+      pieces: effectiveFloorPieces.map((p) => ({
+        kind: p.kind || (p?.material?.kind === 'plank' ? 'plank' : 'tile'),
         material_id: p?.material?.id ?? null,
-        position: p.position,
-        rotation: p.rotation,
-        size: p.size,
-        scaleXZ: p.scaleXZ,
+        position: Array.isArray(p.position) ? p.position : [0, 0.5, 0],
+        rotation: Array.isArray(p.rotation) ? p.rotation : [0, 0, 0],
+        size: Array.isArray(p.size) ? p.size : [0.6, 0.12, 0.6],
+        scaleXZ: p.scaleXZ || { x: 1, z: 1 },
         lockSizeXZ: !!p.lockSizeXZ,
       })),
     }
@@ -456,13 +466,15 @@ function Demo() {
     selectedMaterialId,
     selectedWallMaterialId,
     pieces,
-    wallPiece,
+    activeFloorPiece,
+    activeWallPiece,
     activeWallKey,
   ])
 
   const resetSceneState = useCallback(() => {
     setSelectedSceneId(null)
     setSceneName('')
+    setIsReadOnly(false)
     setPieces([])
     setWallPieces([])
     setPreviewFloorMaterial(null)
@@ -478,8 +490,10 @@ function Demo() {
     window.localStorage.removeItem('three.lastSceneId')
   }, [])
 
-  const hydrateScene = useCallback((sceneData) => {
+  const hydrateScene = useCallback((sceneData, catalogList) => {
     if (!sceneData || typeof sceneData !== 'object') return
+    const list = Array.isArray(catalogList) && catalogList.length ? catalogList : materials
+
     setFloor(sceneData.floor === 'ceramic' ? 'ceramic' : 'wood')
     setPreviewFloorMaterial(null)
     setPreviewWallMaterial(null)
@@ -515,12 +529,11 @@ function Demo() {
     }
 
     if (sceneData.roomSizeCm && typeof sceneData.roomSizeCm === 'object') {
-      setRoomSizeCm((prev) => ({
-        ...prev,
-        width: Number(sceneData.roomSizeCm.width) || prev.width,
-        depth: Number(sceneData.roomSizeCm.depth) || prev.depth,
-        height: Number(sceneData.roomSizeCm.height) || prev.height,
-      }))
+      setRoomSizeCm({
+        width: Number(sceneData.roomSizeCm.width) || 1000,
+        depth: Number(sceneData.roomSizeCm.depth) || 1000,
+        height: Number(sceneData.roomSizeCm.height) || 300,
+      })
     }
 
     if (sceneData.selectedMaterialId != null) {
@@ -532,16 +545,16 @@ function Demo() {
     }
 
     const wallData = sceneData.wall && typeof sceneData.wall === 'object' ? sceneData.wall : null
-    if (wallData) {
+    if (wallData && wallData.material_id != null) {
       if (wallData.activeWallKey) {
         setActiveWallKey(String(wallData.activeWallKey))
       }
 
-      const wallMaterial = materials.find((m) => Number(m.id) === Number(wallData.material_id)) ?? null
-      const dims = getMaterialDimsCm(wallMaterial)
-      const wCm = Number(wallData.width_cm || dims.width || 60)
-      const dCm = Number(wallData.depth_cm || dims.depth || 60)
-      if (wallMaterial && wCm > 0 && dCm > 0) {
+      const wallMaterial = list.find((m) => Number(m.id) === Number(wallData.material_id)) ?? null
+      if (wallMaterial) {
+        const dims = getMaterialDimsCm(wallMaterial)
+        const wCm = Number(wallData.width_cm || dims.width || 60)
+        const dCm = Number(wallData.depth_cm || dims.depth || 60)
         const id = nextId.current++
         setWallPieces([
           {
@@ -553,8 +566,11 @@ function Demo() {
             depth_cm: dCm,
             wallKey: String(wallData.activeWallKey || 'north'),
             textureUrl: wallMaterial.image_url || WHITE_TEX_DATA_URL,
+            roughness: wallMaterial.kind === 'plank' ? 0.75 : 0.65,
+            metalness: 0.0,
           },
         ])
+        setSelectedWallMaterialId(Number(wallMaterial.id))
       } else {
         setWallPieces([])
       }
@@ -570,15 +586,20 @@ function Demo() {
     }
 
     const raw = nextPieces[0]
-    const material = materials.find((m) => Number(m.id) === Number(raw?.material_id)) ?? null
+    const material = list.find((m) => Number(m.id) === Number(raw?.material_id)) ?? null
+    if (!material) {
+      setPieces([])
+      setSelected(null)
+      return
+    }
     const dims = getMaterialDimsCm(material)
     const id = nextId.current++
     const piece = {
       id,
       kind: raw?.kind === 'plank' || material?.kind === 'plank' ? 'plank' : 'tile',
-      material: material ?? null,
+      material,
       name: `Pieza-${id}`,
-      position: Array.isArray(raw?.position) ? raw.position : [0, roomLimits.y, 0],
+      position: Array.isArray(raw?.position) ? raw.position : [0, 0.5, 0],
       rotation: Array.isArray(raw?.rotation) ? raw.rotation : [0, 0, 0],
       size: Array.isArray(raw?.size) ? raw.size : [dims.width / 100, 0.12, dims.depth / 100],
       scaleXZ: raw?.scaleXZ && typeof raw.scaleXZ === 'object' ? raw.scaleXZ : { x: 1, z: 1 },
@@ -588,18 +609,17 @@ function Demo() {
       metalness: 0.0,
     }
     setPieces([piece])
+    setSelectedMaterialId(Number(material.id))
     setSelected(null)
-  }, [materials, roomLimits.y])
+  }, [materials])
 
-  // Si se seleccionó un escenario antes de cargar materiales, diferimos la hidratación.
+  // Hidratar la escena apenas estén listos TANTO los datos de la escena como el catálogo de materiales
   useEffect(() => {
-    const pending = pendingSceneDataRef.current
-    if (!pending) return
-    if (!materialsLoading) {
-      pendingSceneDataRef.current = null
-      hydrateScene(pending)
-    }
-  }, [materialsLoading, hydrateScene])
+    if (!pendingSceneData) return
+    if (materialsLoading) return
+    hydrateScene(pendingSceneData, materials)
+    setPendingSceneData(null)
+  }, [pendingSceneData, materialsLoading, materials, hydrateScene])
 
   const loadSceneById = useCallback(async (sceneId) => {
     if (!sceneId) {
@@ -625,18 +645,14 @@ function Demo() {
       const item = data?.item
       setSelectedSceneId(Number(item?.id) || null)
       setSceneName(String(item?.name || ''))
+      setIsReadOnly(!!item?.read_only)
       window.localStorage.setItem('three.lastSceneId', String(item?.id || ''))
-
-      if (materialsLoading) {
-        pendingSceneDataRef.current = item?.data ?? null
-      } else {
-        hydrateScene(item?.data ?? null)
-      }
+      setPendingSceneData(item?.data ?? null)
     } catch (err) {
       console.error(err)
       toast('No se pudo cargar el escenario.', { type: 'error' })
     }
-  }, [materialsLoading, hydrateScene, toast])
+  }, [toast])
 
   useEffect(() => {
     if (initialUrlHandledRef.current) return
@@ -731,6 +747,49 @@ function Demo() {
         window.localStorage.setItem('three.lastSceneId', String(savedId))
       }
 
+      // Si había materiales en modo previsualización al momento de guardar, los dejamos aplicados en escena
+      if (previewFloorMaterial) {
+        const dims = getMaterialDimsCm(previewFloorMaterial)
+        const id = nextId.current++
+        setPieces([
+          {
+            id,
+            kind: previewFloorMaterial.kind === 'plank' ? 'plank' : 'tile',
+            material: previewFloorMaterial,
+            name: `Pieza-${id}`,
+            position: [0, 0.5, 0],
+            rotation: [0, 0, 0],
+            size: [dims.width / 100, 0.12, dims.depth / 100],
+            scaleXZ: { x: 1, z: 1 },
+            lockSizeXZ: dims.locked,
+            textureUrl: previewFloorMaterial.image_url,
+            roughness: previewFloorMaterial.kind === 'plank' ? 0.75 : 0.65,
+            metalness: 0.0,
+          },
+        ])
+        setPreviewFloorMaterial(null)
+      }
+
+      if (previewWallMaterial) {
+        const dims = getMaterialDimsCm(previewWallMaterial)
+        const id = nextId.current++
+        setWallPieces([
+          {
+            id,
+            kind: previewWallMaterial.kind === 'plank' ? 'plank' : 'tile',
+            material: previewWallMaterial,
+            name: `ParedPieza-${id}`,
+            width_cm: dims.width,
+            depth_cm: dims.depth,
+            wallKey: activeWallKey,
+            textureUrl: previewWallMaterial.image_url || WHITE_TEX_DATA_URL,
+            roughness: previewWallMaterial.kind === 'plank' ? 0.75 : 0.65,
+            metalness: 0.0,
+          },
+        ])
+        setPreviewWallMaterial(null)
+      }
+
       // refrescar lista
       const listResp = await fetch('/3d/scenes', {
         method: 'GET',
@@ -749,7 +808,7 @@ function Demo() {
       toast(String(err?.message || 'No se pudo guardar el escenario.'), { type: 'error' })
       return null
     }
-  }, [sceneName, selectedSceneId, buildScenePayload, scenesError])
+  }, [sceneName, selectedSceneId, buildScenePayload, scenesError, previewFloorMaterial, previewWallMaterial, activeWallKey, toast])
 
   const clearSelectionVisual = useCallback(() => {
     if (lastEmissive.current.obj && lastEmissive.current.obj.material?.emissive) {
@@ -1242,11 +1301,10 @@ function Demo() {
   const handleGenerateQuote = useCallback(async () => {
     if (!quoteSummary?.ready || quoteLoading) return
 
-    let sceneId = selectedSceneId
-    if (!sceneId) {
-      sceneId = await saveScene()
-      if (!sceneId) return
-    }
+    // Siempre guardamos/actualizamos el escenario antes de generar el PDF para que la escena quede idéntica a la cotización
+    const savedId = await saveScene()
+    const sceneId = savedId || selectedSceneId
+    if (!sceneId) return
 
     if (inventoryStatus?.canCompute && inventoryStatus?.canFulfill === false) {
       const ok = await confirm(
@@ -1565,6 +1623,7 @@ function Demo() {
         onGenerateQuote={handleGenerateQuote}
         quoteLoading={quoteLoading}
         inventoryStatus={inventoryStatus}
+        isReadOnly={isReadOnly}
       />
       {/* Panel de Iluminación - esquina inferior izquierda */}
       <LightingPanel
@@ -1592,6 +1651,7 @@ function Demo() {
         onToggleWallCoverSolid={() => setWallCoverSolid(v => !v)}
         timeOfDay={timeOfDay}
         lightIntensity={lightIntensity}
+        isReadOnly={isReadOnly}
         onApplyFloor={() => {
           const applied = addOnePiece(previewFloorMaterial)
           if (applied) {
@@ -1691,43 +1751,45 @@ function Demo() {
         {/* Postprocesado */}
         <PostFX enabled={postFXOn && postprocessingConfig.enabled} dofOn={dofOn} selected={selected} />
 
-        {/* Escenario y Piso (Adaptable a la cuadrícula Sandbox) */}
-        <Floor
-          kind={floor}
-          width={roomSize.width}
-          depth={roomSize.depth}
-          roomShape={roomShape}
-          customGrid={customGrid}
-          onPointerDown={handleSelect}
-          name="Piso"
-        />
+        <Suspense fallback={null}>
+          {/* Escenario y Piso (Adaptable a la cuadrícula Sandbox) */}
+          <Floor
+            kind={floor}
+            width={roomSize.width}
+            depth={roomSize.depth}
+            roomShape={roomShape}
+            customGrid={customGrid}
+            onPointerDown={handleSelect}
+            name="Piso"
+          />
 
-        {/* Cobertura de Piso (Modo Grilla o Sólido, adaptable a la cuadrícula Sandbox) */}
-        <CoverPreview
-          enabled={!!activeFloorPiece && coverageData?.computed}
-          piece={activeFloorPiece}
-          pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
-          roomSize={roomSize}
-          roomShape={roomShape}
-          customGrid={customGrid}
-          textureUrl={activeFloorPiece?.textureUrl}
-          solid={floorCoverSolid}
-          onPointerDown={handleSelect}
-        />
+          {/* Cobertura de Piso (Modo Grilla o Sólido, adaptable a la cuadrícula Sandbox) */}
+          <CoverPreview
+            enabled={!!activeFloorPiece && coverageData?.computed}
+            piece={activeFloorPiece}
+            pieceSizeCm={coverageData?.computed ? { x: coverageData.pieceCmX, z: coverageData.pieceCmZ } : null}
+            roomSize={roomSize}
+            roomShape={roomShape}
+            customGrid={customGrid}
+            textureUrl={activeFloorPiece?.textureUrl}
+            solid={floorCoverSolid}
+            onPointerDown={handleSelect}
+          />
 
-        {/* Cobertura en Paredes (Modo Grilla o Sólido, adaptable a todos los muros del cuarto Sandbox) */}
-        <WallCoverPreview
-          enabled={!!activeWallPiece && wallCoverageData?.computed}
-          piece={activeWallPiece}
-          roomSize={roomSize}
-          wallThickness={wallThickness}
-          wallSegments={wallGeometry.segments}
-          wallHeightFactor={wallHeightFactor}
-          hiddenWallIds={hiddenWallIds}
-          textureUrl={activeWallPiece?.textureUrl}
-          solid={wallCoverSolid}
-          onPointerDown={handleSelect}
-        />
+          {/* Cobertura en Paredes (Modo Grilla o Sólido, adaptable a todos los muros del cuarto Sandbox) */}
+          <WallCoverPreview
+            enabled={!!activeWallPiece && wallCoverageData?.computed}
+            piece={activeWallPiece}
+            roomSize={roomSize}
+            wallThickness={wallThickness}
+            wallSegments={wallGeometry.segments}
+            wallHeightFactor={wallHeightFactor}
+            hiddenWallIds={hiddenWallIds}
+            textureUrl={activeWallPiece?.textureUrl}
+            solid={wallCoverSolid}
+            onPointerDown={handleSelect}
+          />
+        </Suspense>
 
         {/* Renderizado de Ventanas 3D Múltiples */}
         {wallHeightFactor > 0.2 && windows.map((win, idx) => {

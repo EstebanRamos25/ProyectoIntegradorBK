@@ -71,6 +71,7 @@ export function Controls({
   onGenerateQuote,
   quoteLoading,
   inventoryStatus,
+  isReadOnly = false,
 }) {
   const [activeTab, setActiveTab] = useState('materials') // 'materials' | 'space' | 'quote'
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -132,6 +133,83 @@ export function Controls({
     } else {
       onSelectMaterial(materialId)
     }
+  }
+
+  if (isReadOnly) {
+    return (
+      <div
+        onWheelCapture={(e) => e.stopPropagation()}
+        style={styles.topBar}
+      >
+        <div style={styles.topBarLeft}>
+          <img src="/images/avodah_logo.png" alt="AVODAH 3D" style={{ height: '24px', objectFit: 'contain' }} />
+          <div style={styles.divider} />
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              borderRadius: 8,
+              background: 'rgba(245, 158, 11, 0.18)',
+              border: '1px solid rgba(245, 158, 11, 0.45)',
+              color: '#fbbf24',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            🔒 Modo Solo Visualización
+          </span>
+          {sceneName && (
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>
+              📁 {sceneName}
+            </span>
+          )}
+        </div>
+
+        <div style={styles.topBarCenter}>
+          <div style={styles.surfacePills}>
+            {[
+              { id: 'full', label: '🧱 Paredes Completas' },
+              { id: 'half', label: '📐 Media Pared' },
+              { id: 'hidden', label: '👁️ Ocultar Paredes' },
+            ].map((wm) => (
+              <button
+                key={wm.id}
+                type="button"
+                onClick={() => onWallViewModeChange?.(wm.id)}
+                style={{
+                  ...styles.surfaceBtn,
+                  ...(wallViewMode === wm.id ? styles.surfaceBtnActive : {}),
+                }}
+              >
+                {wm.label}
+              </button>
+            ))}
+          </div>
+          {hiddenWallIds?.length > 0 && (
+            <button
+              type="button"
+              onClick={onResetHiddenWalls}
+              style={styles.btnSecondary}
+            >
+              🔄 Mostrar paredes ({hiddenWallIds.length})
+            </button>
+          )}
+        </div>
+
+        <div style={styles.topBarRight}>
+          <button
+            type="button"
+            onClick={onCreateNewScene}
+            style={styles.btnPrimary}
+            title="Crear un nuevo escenario editable"
+          >
+            ✨ Crear Nuevo Escenario
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

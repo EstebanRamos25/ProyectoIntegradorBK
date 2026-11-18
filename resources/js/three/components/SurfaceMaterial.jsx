@@ -1,17 +1,11 @@
 import React, { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
-import { useTexture } from '@react-three/drei'
 import { SRGBColorSpace } from 'three'
-
-const WHITE_TEX_DATA_URL =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ffffff"/></svg>'
-  )
+import { useSafeTexture } from '../hooks/useSafeTexture'
 
 export function SurfaceMaterial({ textureUrl, repeat = [1, 1], opacity = 1, transparent = false }) {
   const { gl } = useThree()
-  const map = useTexture(textureUrl || WHITE_TEX_DATA_URL)
+  const map = useSafeTexture(textureUrl)
 
   useEffect(() => {
     if (!map) return

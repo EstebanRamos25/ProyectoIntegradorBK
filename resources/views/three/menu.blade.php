@@ -144,8 +144,9 @@
                             @foreach($scenes as $scene)
                                 @php
                                     $quote = isset($quotesByScene) ? ($quotesByScene->get($scene->id) ?? null) : null;
-                                    $canDelete = ((int) $scene->user_id === (int) $user->id)
-                                        && (!$quote || !in_array($quote->status, ['sent', 'sold'], true));
+                                    $factura = $quote?->venta?->factura ?? null;
+                                    $isLocked = $quote && in_array($quote->status, ['sent', 'sold'], true);
+                                    $canDelete = ((int) $scene->user_id === (int) $user->id) && !$isLocked;
                                 @endphp
                                 <div class="flex flex-col justify-between rounded-xl border border-slate-200 p-4 hover:border-slate-300">
                                     <div class="flex items-start justify-between gap-3">
@@ -158,8 +159,9 @@
                                             target="_blank"
                                             rel="noopener"
                                             class="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                                            title="{{ $isLocked ? 'Abrir en modo de solo visualización' : 'Abrir en el editor 3D' }}"
                                         >
-                                            Abrir
+                                            {{ $isLocked ? 'Visualizar' : 'Abrir' }}
                                         </a>
                                     </div>
 
@@ -174,6 +176,20 @@
                                                 >
                                                     Ver cotización
                                                 </a>
+
+                                                @if($factura)
+                                                    <a
+                                                        href="{{ route('facturas.pdf', ['factura' => $factura->id]) }}"
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        class="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-white transition"
+                                                        style="background-color:#4f46e5;"
+                                                        onmouseover="this.style.backgroundColor='#4338ca'"
+                                                        onmouseout="this.style.backgroundColor='#4f46e5'"
+                                                    >
+                                                        🧾 Ver factura ({{ $factura->numero_factura }})
+                                                    </a>
+                                                @endif
 
                                                 @if($quote->status === 'sent')
                                                     <span class="inline-flex items-center rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
@@ -297,6 +313,7 @@
                                     @foreach($clientScenes as $scene)
                                         @php
                                             $quote = isset($quotesByScene) ? ($quotesByScene->get($scene->id) ?? null) : null;
+                                            $factura = $quote?->venta?->factura ?? null;
                                             $quoteStatus = $quote ? (string) $quote->status : 'none';
                                             $clientName = optional($scene->user)->name ?? ('Usuario #' . $scene->user_id);
                                             $clientEmail = optional($scene->user)->email ?? '';
@@ -328,7 +345,7 @@
                                                         rel="noopener"
                                                         class="inline-flex shrink-0 items-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                                                     >
-                                                        Abrir
+                                                        Visualizar
                                                     </a>
                                                 </div>
                                             </div>
@@ -343,6 +360,20 @@
                                                             class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                                                         >
                                                             Ver cotización
+                                                        </a>
+                                                    @endif
+
+                                                    @if($factura)
+                                                        <a
+                                                            href="{{ route('facturas.pdf', ['factura' => $factura->id]) }}"
+                                                            target="_blank"
+                                                            rel="noopener"
+                                                            class="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-white transition"
+                                                            style="background-color:#4f46e5;"
+                                                            onmouseover="this.style.backgroundColor='#4338ca'"
+                                                            onmouseout="this.style.backgroundColor='#4f46e5'"
+                                                        >
+                                                            🧾 Ver factura ({{ $factura->numero_factura }})
                                                         </a>
                                                     @endif
 

@@ -32,18 +32,26 @@ class ThreeSceneController extends Controller
         $user = $request->user();
         $isAdmin = $user && (!method_exists($user, 'inRole') || !$user->inRole('client'));
 
-        $query = ThreeScene::query()->where('id', $sceneId);
+        $query = ThreeScene::query()->with('quotes')->where('id', $sceneId);
         if (!$isAdmin) {
             $query->where('user_id', $user->id);
         }
 
         $scene = $query->firstOrFail();
 
+        $latestQuote = $scene->quotes->sortByDesc('id')->first();
+        $quoteStatus = $latestQuote ? (string) $latestQuote->status : null;
+        $isLockedByQuote = in_array($quoteStatus, ['sent', 'sold'], true);
+        $isNotOwner = (int) $scene->user_id !== (int) $user->id;
+        $isReadOnly = $isLockedByQuote || $isNotOwner;
+
         return response()->json([
             'item' => [
                 'id' => $scene->id,
                 'name' => $scene->name,
                 'data' => $scene->data,
+                'read_only' => $isReadOnly,
+                'quote_status' => $quoteStatus,
                 'updated_at' => $scene->updated_at,
                 'created_at' => $scene->created_at,
             ],
@@ -87,9 +95,20 @@ class ThreeSceneController extends Controller
         $user = $request->user();
 
         $scene = ThreeScene::query()
+            ->with('quotes')
             ->where('user_id', $user->id)
             ->where('id', $sceneId)
             ->firstOrFail();
+
+        $hasSentOrSoldQuote = $scene->quotes->contains(function ($quote) {
+            return in_array($quote->status, ['sent', 'sold'], true);
+        });
+
+        if ($hasSentOrSoldQuote) {
+            return response()->json([
+                'message' => 'Esta escena ya fue enviada o vendida y solo puede visualizarse. Crea un nuevo escenario si deseas realizar otro diseño.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],

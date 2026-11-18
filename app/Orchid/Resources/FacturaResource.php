@@ -3,13 +3,28 @@
 namespace App\Orchid\Resources;
 
 use App\Models\Factura;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Orchid\Crud\Resource;
+use Orchid\Crud\ResourceRequest;
 use Orchid\Screen\Sight;
 use Orchid\Screen\TD;
 
 class FacturaResource extends Resource
 {
     public static $model = Factura::class;
+
+    public function paginationQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $model->newQuery()
+            ->orderByDesc('id');
+    }
+
+    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $model->newQuery()
+            ->orderByDesc('id');
+    }
 
     /**
      * Campos del formulario (solo lectura — las facturas no se editan manualmente).

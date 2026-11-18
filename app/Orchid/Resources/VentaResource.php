@@ -8,6 +8,9 @@ use App\Models\Promocion;
 use App\Models\Inventario;
 use App\Models\Producto;
 use Orchid\Crud\Resource;
+use Orchid\Crud\ResourceRequest;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Orchid\Screen\Fields\Input;
 use Orchid\Screen\Fields\DateTimer;
 use Orchid\Screen\Fields\Select;
@@ -22,6 +25,23 @@ class VentaResource extends Resource
      * @var string
      */
     public static $model = Venta::class;
+
+    public function paginationQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $model->newQuery()
+            ->orderByDesc('id');
+    }
+
+    public function modelQuery(ResourceRequest $request, Model $model): Builder
+    {
+        return $model->newQuery()
+            ->orderByDesc('id');
+    }
+
+    public function with(): array
+    {
+        return ['usuario', 'producto', 'factura'];
+    }
 
     /**
      * Get the fields displayed by the resource.

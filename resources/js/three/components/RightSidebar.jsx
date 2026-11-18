@@ -1,17 +1,14 @@
 import React, { Suspense, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Environment, ContactShadows, useTexture } from '@react-three/drei'
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei'
 import { SunLight, getEnvironmentPreset } from './SunLight'
-import * as THREE from 'three'
+import { useSafeTexture } from '../hooks/useSafeTexture'
 
 /**
  * Visor 3D miniatura para materiales
  */
 function MiniViewer({ textureUrl, roughness, metalness, timeOfDay, intensity }) {
-  const map = useTexture(textureUrl || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=')
-  map.colorSpace = THREE.SRGBColorSpace
-  map.wrapS = map.wrapT = THREE.RepeatWrapping
-  map.needsUpdate = true
+  const map = useSafeTexture(textureUrl)
 
   return (
     <>
@@ -61,6 +58,7 @@ export function RightSidebar({
   onCancelPreviewWall,
   onRemoveFloor,
   onRemoveWall,
+  isReadOnly = false,
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const currencyFormatter = new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' })
@@ -120,7 +118,7 @@ export function RightSidebar({
             </div>
           )}
 
-          {actionButtons && <div style={styles.actionRow}>{actionButtons}</div>}
+          {!isReadOnly && actionButtons && <div style={styles.actionRow}>{actionButtons}</div>}
         </div>
       </div>
     )
